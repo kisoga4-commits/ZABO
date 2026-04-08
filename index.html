@@ -320,7 +320,8 @@
         currentMemberId: null,
         kitchenFilter: "all",
         salesFilter: "all",
-        lastNewOrderId: null
+        lastNewOrderId: null,
+        postLoginRoute: "customer-order"
       };
 
       const byId = (id) => document.querySelector(`#${id}`);
@@ -334,6 +335,10 @@
         document.querySelectorAll(".screen").forEach((screen) => screen.classList.remove("active"));
         byId(safe).classList.add("active");
         renderNav(safe);
+      }
+
+      function goTo(routeId) {
+        location.hash = `#${routeId}`;
       }
 
       function renderNav(activeId) {
@@ -381,7 +386,8 @@
         }
         if (state.customerType === "member" && !state.currentMemberId) {
           alert("ลูกค้า member ต้องล็อกอินก่อนยืนยันออเดอร์");
-          location.hash = "#member-login";
+          state.postLoginRoute = "customer-order";
+          goTo("member-login");
           return;
         }
         const bill = calcCart();
@@ -408,7 +414,7 @@
         state.cart = [];
         alert(`ส่งออเดอร์ ${id} เข้าหน้าร้านแล้ว (mock realtime)`);
         renderAll();
-        location.hash = "#kitchen-orders";
+        goTo("kitchen-orders");
       }
 
       function orderStatusLabel(status) {
@@ -491,6 +497,12 @@
         }));
         document.querySelectorAll(".js-customer").forEach((button) => button.addEventListener("click", () => {
           state.customerType = button.dataset.type;
+          if (state.customerType === "member" && !state.currentMemberId) {
+            state.postLoginRoute = "customer-order";
+            alert("เลือก member: กรุณาล็อกอินก่อน แล้วกลับมาทำออเดอร์ต่อได้ทันที");
+            goTo("member-login");
+            return;
+          }
           renderCustomerOrder();
         }));
         document.querySelectorAll(".js-add").forEach((button) => button.addEventListener("click", () => addCart(button.dataset.menuId)));
@@ -499,7 +511,8 @@
         const loginButton = byId("go-member-login");
         if (loginButton) {
           loginButton.addEventListener("click", () => {
-            location.hash = "#member-login";
+            state.postLoginRoute = "customer-order";
+            goTo("member-login");
           });
         }
       }
@@ -538,7 +551,7 @@
           state.customerType = "member";
           alert(`ล็อกอินสำเร็จ: ${member.name}`);
           renderAll();
-          location.hash = "#customer-order";
+          goTo(state.postLoginRoute || "customer-order");
         });
 
         const redeemBtn = byId("redeem-btn");
@@ -570,6 +583,10 @@
           <div class="card">
             <h2>หน้าร้านสำหรับรับออเดอร์</h2>
             <p class="muted">ออเดอร์ใหม่จะขึ้นทันทีจากหน้าลูกค้า (mock realtime queue).</p>
+            <div class="status-row" style="margin-top:0.7rem">
+              <button type="button" class="button-ghost js-go" data-go="customer-order">ไปหน้าลูกค้า</button>
+              <button type="button" class="button-ghost js-go" data-go="admin-dashboard">ไป dashboard</button>
+            </div>
             ${state.lastNewOrderId ? `<div class="note">ออเดอร์ใหม่ล่าสุด: <strong>${state.lastNewOrderId}</strong></div>` : ""}
             <div class="status-row" style="margin-top:0.7rem">
               <button type="button" class="js-kfilter ${state.kitchenFilter === "all" ? "active-pill" : "button-ghost"}" data-filter="all">ทั้งหมด</button>
@@ -640,6 +657,16 @@
               <div class="kpi"><small>ยอด food</small><strong>฿${sum.food.toLocaleString()}</strong></div>
               <div class="kpi"><small>ยอด drink</small><strong>฿${sum.drink.toLocaleString()}</strong></div>
               <div class="kpi"><small>สมาชิกทั้งหมด</small><strong>${app.members.length}</strong></div>
+            </div>
+            <div class="card" style="margin-top:0.9rem;background:#ecfeff">
+              <h3 style="margin-top:0">เมนูทางลัดหลังร้าน</h3>
+              <div class="status-row">
+                <button type="button" class="button-ghost js-go" data-go="menu-management">จัดการเมนู</button>
+                <button type="button" class="button-ghost js-go" data-go="member-management">จัดการสมาชิก</button>
+                <button type="button" class="button-ghost js-go" data-go="promo-management">จัดการโปรโมชั่น</button>
+                <button type="button" class="button-ghost js-go" data-go="sales-report">ดูยอดขาย</button>
+                <button type="button" class="button-ghost js-go" data-go="kitchen-orders">หน้ารับออเดอร์</button>
+              </div>
             </div>
           </div>
         `;
@@ -789,6 +816,10 @@
         }));
       }
 
+      function wireGlobalActions() {
+        document.querySelectorAll(".js-go").forEach((button) => button.addEventListener("click", () => goTo(button.dataset.go)));
+      }
+
       function renderAll() {
         renderCustomerOrder();
         renderMemberLogin();
@@ -798,6 +829,7 @@
         renderMemberManagement();
         renderPromoManagement();
         renderSalesReport();
+        wireGlobalActions();
       }
 
       window.addEventListener("hashchange", () => {
