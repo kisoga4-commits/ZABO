@@ -53,6 +53,11 @@
     opLog: [],
     fraudLogs: [],
     members: {},
+    promotionConfig: {
+      title: '',
+      detail: '',
+      pointPerBaht: 0
+    },
     recovery: {
       phone: '',
       color: '',
@@ -100,7 +105,8 @@
     pendingAddonItem: null,
     currentAddonQty: 1,
     currentCheckoutTotal: 0,
-    checkoutMemberNameDirty: false,
+    checkoutMemberInputDirty: false,
+    checkoutMemberPanelVisible: false,
     qrScanner: null,
     deferredInstallPrompt: null,
     syncButtonResetTimer: null,
@@ -623,7 +629,12 @@
       if (!Array.isArray(merged.carts[i])) merged.carts[i] = [];
     }
     merged.sales = Array.isArray(raw?.sales) ? raw.sales : [];
-    merged.members = (raw?.members && typeof raw.members === 'object' && !Array.isArray(raw.members)) ? raw.members : {};
+    merged.members = normalizeMembers((raw?.members && typeof raw.members === 'object' && !Array.isArray(raw.members)) ? raw.members : {});
+    merged.promotionConfig = {
+      title: String(raw?.promotionConfig?.title || ''),
+      detail: String(raw?.promotionConfig?.detail || ''),
+      pointPerBaht: Math.max(0, Number(raw?.promotionConfig?.pointPerBaht || 0))
+    };
     merged.opLog = Array.isArray(raw?.opLog) ? raw.opLog : [];
     merged.fraudLogs = Array.isArray(raw?.fraudLogs) ? raw.fraudLogs : [];
     if (!merged.shopId) merged.shopId = makeShopId();
@@ -644,10 +655,51 @@
     return String(raw || '').replace(/\D/g, '').slice(0, 10);
   }
 
+  function normalizeMemberRecord(raw = {}, fallbackId = '') {
+    const safeId = String(raw.id || fallbackId || `MEM-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    return {
+      id: safeId,
+      phone: sanitizePhone(raw.phone || ''),
+      name: String(raw.name || '').trim(),
+      points: Math.max(0, Number(raw.points || 0)),
+      firstSeenAt: Number(raw.firstSeenAt || raw.createdAt || Date.now()),
+      updatedAt: Number(raw.updatedAt || Date.now())
+    };
+  }
+
+  function normalizeMembers(rawMembers) {
+    const members = {};
+    if (!rawMembers || typeof rawMembers !== 'object') return members;
+    Object.entries(rawMembers).forEach(([legacyKey, value]) => {
+      if (!value || typeof value !== 'object') return;
+      const normalized = normalizeMemberRecord(value, value.id || legacyKey);
+      members[normalized.id] = normalized;
+    });
+    return members;
+  }
+
+  function getMemberById(memberId = '') {
+    return state.db.members[String(memberId || '')] || null;
+  }
+
   function findMemberByPhone(phone = '') {
     const normalizedPhone = sanitizePhone(phone);
     if (!normalizedPhone || !state.db.members) return null;
-    return state.db.members[normalizedPhone] || null;
+    return Object.values(state.db.members).find((member) => sanitizePhone(member.phone) === normalizedPhone) || null;
+  }
+
+  function findMemberByName(name = '') {
+    const normalized = String(name || '').trim().toLowerCase();
+    if (!normalized || !state.db.members) return null;
+    return Object.values(state.db.members).find((member) => String(member.name || '').trim().toLowerCase() === normalized) || null;
+  }
+
+  function resolveMemberByKeyword(keyword = '') {
+    const text = String(keyword || '').trim();
+    if (!text) return null;
+    const byPhone = findMemberByPhone(text);
+    if (byPhone) return byPhone;
+    return findMemberByName(text);
   }
 
   function renderCheckoutMemberHint(text = '', tone = 'default') {
@@ -667,35 +719,50 @@
   }
 
   function markCheckoutMemberDirty() {
-    state.checkoutMemberNameDirty = true;
+    state.checkoutMemberInputDirty = true;
   }
 
-  function lookupMemberByPhone(rawPhone = '') {
-    const phoneInput = qs('checkout-member-phone');
-    const nameInput = qs('checkout-member-name');
-    if (!phoneInput || !nameInput) return;
-    const normalizedPhone = sanitizePhone(rawPhone || phoneInput.value);
-    phoneInput.value = normalizedPhone;
-    if (!normalizedPhone) {
-      if (!state.checkoutMemberNameDirty) nameInput.value = '';
+  function setCheckoutMemberPanelVisible(visible = false) {
+    state.checkoutMemberPanelVisible = Boolean(visible);
+    const fields = qs('checkout-member-fields');
+    const label = qs('checkout-member-toggle-label');
+    if (fields) fields.classList.toggle('hidden', !state.checkoutMemberPanelVisible);
+    if (label) label.textContent = state.checkoutMemberPanelVisible ? 'ซ่อนช่องสมาชิก' : 'กดเพื่อกรอก';
+  }
+
+  function toggleCheckoutMemberSection() {
+    setCheckoutMemberPanelVisible(!state.checkoutMemberPanelVisible);
+    if (state.checkoutMemberPanelVisible) qs('checkout-member-keyword')?.focus();
+  }
+
+  function lookupCheckoutMember(rawKeyword = '') {
+    const keywordInput = qs('checkout-member-keyword');
+    if (!keywordInput) return null;
+    const keyword = String(rawKeyword || keywordInput.value || '').trim();
+    keywordInput.value = keyword;
+    if (!keyword) {
       renderCheckoutMemberHint('ไม่กรอก = ลูกค้าทั่วไป');
-      return;
+      return null;
     }
-    const member = findMemberByPhone(normalizedPhone);
+    const member = resolveMemberByKeyword(keyword);
     if (!member) {
-      if (!state.checkoutMemberNameDirty) nameInput.value = '';
-      renderCheckoutMemberHint('ยังไม่พบสมาชิก: กรอกชื่อแล้วปิดบิลเพื่อสมัครทันที', 'warn');
-      return;
+      renderCheckoutMemberHint('ยังไม่พบสมาชิก: พิมพ์ชื่อหรือเบอร์ แล้วปิดบิลเพื่อสมัครทันที', 'warn');
+      return null;
     }
-    if (!state.checkoutMemberNameDirty || !nameInput.value.trim()) {
-      nameInput.value = member.name || '';
-    }
-    renderCheckoutMemberHint(`สมาชิกเดิม: ${member.name || normalizedPhone}`, 'success');
+    renderCheckoutMemberHint(`สมาชิกเดิม: ${member.name || member.phone} (${formatMoney(member.points)} แต้ม)`, 'success');
+    return member;
   }
 
-  function applyCheckoutMemberPhone() {
-    state.checkoutMemberNameDirty = false;
-    lookupMemberByPhone(qs('checkout-member-phone')?.value || '');
+  function applyCheckoutMemberLookup() {
+    state.checkoutMemberInputDirty = false;
+    lookupCheckoutMember(qs('checkout-member-keyword')?.value || '');
+  }
+
+  function resetCheckoutMemberInputs() {
+    if (qs('checkout-member-keyword')) qs('checkout-member-keyword').value = '';
+    state.checkoutMemberInputDirty = false;
+    setCheckoutMemberPanelVisible(false);
+    renderCheckoutMemberHint('ไม่กรอก = ลูกค้าทั่วไป');
   }
 
   //* save/load open
@@ -1457,10 +1524,7 @@
     state.currentCheckoutTotal = total;
     if (qs('checkout-unit-id')) qs('checkout-unit-id').textContent = String(unit.id);
     if (qs('checkout-total')) qs('checkout-total').textContent = formatMoney(total);
-    if (qs('checkout-member-phone')) qs('checkout-member-phone').value = '';
-    if (qs('checkout-member-name')) qs('checkout-member-name').value = '';
-    state.checkoutMemberNameDirty = false;
-    renderCheckoutMemberHint('ไม่กรอก = ลูกค้าทั่วไป');
+    resetCheckoutMemberInputs();
     if (list) {
       list.innerHTML = unit.orders.map((row, index) => `
         <div class="flex justify-between items-center gap-3 py-3">
@@ -1577,26 +1641,33 @@
     const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
     if (!unit || !unit.orders.length) return;
     const total = unit.orders.reduce((sum, row) => sum + row.total, 0);
-    const memberPhone = sanitizePhone(qs('checkout-member-phone')?.value || '');
-    const memberNameInput = String(qs('checkout-member-name')?.value || '').trim();
+    const memberKeyword = String(qs('checkout-member-keyword')?.value || '').trim();
     let memberSnapshot = null;
-    if (memberPhone) {
-      const existing = findMemberByPhone(memberPhone);
-      const resolvedName = memberNameInput || existing?.name || '';
+    if (memberKeyword) {
+      const normalizedPhone = sanitizePhone(memberKeyword);
+      const existing = resolveMemberByKeyword(memberKeyword);
       const nowMs = Date.now();
-      state.db.members[memberPhone] = {
-        phone: memberPhone,
-        name: resolvedName,
+      const nextMember = normalizeMemberRecord({
+        id: existing?.id || '',
+        phone: normalizedPhone || existing?.phone || '',
+        name: normalizedPhone ? (existing?.name || normalizedPhone) : (existing?.name || memberKeyword),
+        points: existing?.points || 0,
         firstSeenAt: existing?.firstSeenAt || nowMs,
         updatedAt: nowMs
-      };
+      });
+      const pointPerBaht = Math.max(0, Number(state.db.promotionConfig?.pointPerBaht || 0));
+      const earnedPoints = Math.floor(total * pointPerBaht);
+      nextMember.points = Number(nextMember.points || 0) + earnedPoints;
+      state.db.members[nextMember.id] = nextMember;
       memberSnapshot = {
-        phone: memberPhone,
-        name: resolvedName
+        id: nextMember.id,
+        phone: nextMember.phone,
+        name: nextMember.name,
+        earnedPoints
       };
       const api = resolveFirebaseSyncApi();
       if (api && state.db.shopId) {
-        const payload = { ...state.db.members[memberPhone], shopId: state.db.shopId };
+        const payload = { ...nextMember, shopId: state.db.shopId };
         if (typeof api.upsertMember === 'function') api.upsertMember(state.db.shopId, payload).catch(() => {});
         else if (typeof api.writeMember === 'function') api.writeMember(state.db.shopId, payload).catch(() => {});
       }
@@ -1627,7 +1698,9 @@
     unit.lastOrderBy = '';
     closeModal('modal-checkout');
     saveDb({ render: true, sync: true });
-    showToast(method === 'transfer' ? 'ปิดบิล (โอน/QR) แล้ว' : 'ปิดบิล (เงินสด) แล้ว', 'success');
+    const paidText = method === 'transfer' ? 'ปิดบิล (โอน/QR) แล้ว' : 'ปิดบิล (เงินสด) แล้ว';
+    const pointText = memberSnapshot?.earnedPoints ? ` +${memberSnapshot.earnedPoints} แต้ม` : '';
+    showToast(`${paidText}${pointText}`, 'success');
     if (state.activeTab === 'shop') renderShopQueue();
     if (state.activeTab === 'manage') renderAnalytics();
   }
@@ -2171,7 +2244,11 @@
     if (qs('config-unit-count')) qs('config-unit-count').value = String(state.db.unitCount || 4);
     if (qs('sys-promptpay-dynamic')) qs('sys-promptpay-dynamic').checked = isPromptPayDynamicEnabled();
     if (qs('system-logo-preview') && state.db.logo) qs('system-logo-preview').src = state.db.logo;
+    if (qs('promo-title')) qs('promo-title').value = state.db.promotionConfig?.title || '';
+    if (qs('promo-detail')) qs('promo-detail').value = state.db.promotionConfig?.detail || '';
+    if (qs('promo-point-rate')) qs('promo-point-rate').value = String(Number(state.db.promotionConfig?.pointPerBaht || 0));
     updateRecoveryStateLabels();
+    renderMemberAdminPanel();
   }
 
   function saveSystemSettings() {
@@ -2187,6 +2264,103 @@
     applyTheme();
     saveDb({ render: true, sync: true });
     showToast('บันทึกการตั้งค่าแล้ว', 'success');
+  }
+
+  function getSortedMembers() {
+    return Object.values(state.db.members || {}).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+  }
+
+  function resetMemberForm() {
+    if (qs('member-form-id')) qs('member-form-id').value = '';
+    if (qs('member-form-name')) qs('member-form-name').value = '';
+    if (qs('member-form-phone')) qs('member-form-phone').value = '';
+    if (qs('member-form-points')) qs('member-form-points').value = '';
+  }
+
+  function editMemberFromSystem(memberId = '') {
+    const member = getMemberById(memberId);
+    if (!member) return;
+    if (qs('member-form-id')) qs('member-form-id').value = member.id;
+    if (qs('member-form-name')) qs('member-form-name').value = member.name || '';
+    if (qs('member-form-phone')) qs('member-form-phone').value = member.phone || '';
+    if (qs('member-form-points')) qs('member-form-points').value = String(Number(member.points || 0));
+    qs('member-form-name')?.focus();
+  }
+
+  function deleteMemberFromSystem(memberId = '') {
+    const member = getMemberById(memberId);
+    if (!member) return;
+    if (!confirm(`ลบสมาชิก ${member.name || member.phone || member.id} ?`)) return;
+    delete state.db.members[member.id];
+    logOperation('DELETE_MEMBER', { memberId: member.id });
+    saveDb({ render: true, sync: true });
+    resetMemberForm();
+    showToast('ลบสมาชิกแล้ว', 'success');
+  }
+
+  function saveMemberFromSystem() {
+    const editId = String(qs('member-form-id')?.value || '').trim();
+    const phone = sanitizePhone(qs('member-form-phone')?.value || '');
+    const name = String(qs('member-form-name')?.value || '').trim();
+    const points = Math.max(0, Number(qs('member-form-points')?.value || 0));
+    if (!name && !phone) return showToast('กรอกชื่อหรือเบอร์โทรอย่างน้อย 1 อย่าง', 'error');
+    const duplicatePhone = phone
+      ? getSortedMembers().find((member) => member.id !== editId && sanitizePhone(member.phone) === phone)
+      : null;
+    if (duplicatePhone) return showToast('เบอร์นี้มีในระบบแล้ว', 'error');
+    const existing = editId ? getMemberById(editId) : null;
+    const nowMs = Date.now();
+    const next = normalizeMemberRecord({
+      id: existing?.id || editId || '',
+      phone,
+      name: name || existing?.name || phone,
+      points,
+      firstSeenAt: existing?.firstSeenAt || nowMs,
+      updatedAt: nowMs
+    });
+    state.db.members[next.id] = next;
+    logOperation(existing ? 'UPDATE_MEMBER' : 'CREATE_MEMBER', { memberId: next.id });
+    saveDb({ render: true, sync: true });
+    resetMemberForm();
+    showToast(existing ? 'อัปเดตสมาชิกแล้ว' : 'เพิ่มสมาชิกแล้ว', 'success');
+  }
+
+  function renderMemberAdminPanel() {
+    const members = getSortedMembers();
+    const count = members.length;
+    const totalPoints = members.reduce((sum, member) => sum + Number(member.points || 0), 0);
+    if (qs('member-total-count')) qs('member-total-count').textContent = formatMoney(count);
+    if (qs('member-total-points')) qs('member-total-points').textContent = formatMoney(totalPoints);
+    const list = qs('member-admin-list');
+    if (!list) return;
+    if (!members.length) {
+      list.innerHTML = '<div class="bg-gray-50 border rounded-xl p-3 text-xs font-bold text-gray-400 text-center">ยังไม่มีสมาชิก</div>';
+      return;
+    }
+    list.innerHTML = members.map((member) => `
+      <div class="bg-gray-50 border rounded-xl p-3 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-black text-sm text-slate-800 truncate">${escapeHtml(member.name || '-')}</div>
+          <div class="text-[10px] font-bold text-gray-500 truncate">${escapeHtml(member.phone || 'ไม่มีเบอร์โทร')}</div>
+          <div class="text-[10px] font-black text-emerald-600 mt-1">แต้ม ${formatMoney(member.points || 0)}</div>
+        </div>
+        <div class="flex flex-col gap-1 shrink-0">
+          <button onclick="editMemberFromSystem('${escapeHtml(member.id)}')" class="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-[10px] font-black">แก้ไข</button>
+          <button onclick="deleteMemberFromSystem('${escapeHtml(member.id)}')" class="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-[10px] font-black">ลบ</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function savePromotionSettings() {
+    state.db.promotionConfig = {
+      title: String(qs('promo-title')?.value || '').trim(),
+      detail: String(qs('promo-detail')?.value || '').trim(),
+      pointPerBaht: Math.max(0, Number(qs('promo-point-rate')?.value || 0))
+    };
+    logOperation('SAVE_PROMOTION_SETTINGS', { ...state.db.promotionConfig });
+    saveDb({ render: true, sync: true });
+    showToast('บันทึกโปรโมชั่นแล้ว', 'success');
   }
 
   async function handleImage(event, type) {
@@ -2265,6 +2439,7 @@
     updateSyncUi();
     renderClientApprovalList();
     updateSyncCheckStatusUi();
+    renderMemberAdminPanel();
   }
   //* system close
 
@@ -4197,8 +4372,9 @@
     openCheckout,
     deleteOrderItem,
     confirmPayment,
-    lookupMemberByPhone,
-    applyCheckoutMemberPhone,
+    lookupCheckoutMember,
+    applyCheckoutMemberLookup,
+    toggleCheckoutMemberSection,
     markCheckoutMemberDirty,
     switchManageSub,
     switchDashTab,
@@ -4219,6 +4395,11 @@
     handleImage,
     exportBackup,
     importBackup,
+    saveMemberFromSystem,
+    editMemberFromSystem,
+    deleteMemberFromSystem,
+    resetMemberForm,
+    savePromotionSettings,
     openRecoveryModal: () => {
       if (!state.isPro) {
         showToast('รุ่นทดลองยังไม่รองรับลืมรหัส Admin', 'error');
