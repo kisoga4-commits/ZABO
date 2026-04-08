@@ -311,6 +311,43 @@
                 <input id="input-import-backup" type="file" accept=".json" class="absolute inset-0 opacity-0 cursor-pointer" onchange="importBackup(event)">
             </div>
         </div>
+
+        <div class="bg-white p-5 rounded-[24px] border shadow-sm mb-6">
+            <div class="flex items-start justify-between gap-3 mb-4">
+                <div>
+                    <h3 class="font-black text-base text-slate-800">👥 จัดการสมาชิก</h3>
+                    <p class="text-[10px] text-slate-500 font-bold">เพิ่ม/แก้ไข/ลบสมาชิก พร้อมดูแต้มสะสมรวม</p>
+                </div>
+                <div class="text-right text-[10px] font-black text-slate-500">
+                    <div>สมาชิกทั้งหมด: <span id="member-total-count" class="text-slate-800">0</span> คน</div>
+                    <div>แต้มรวม: <span id="member-total-points" class="text-emerald-600">0</span> แต้ม</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                <input id="member-form-name" type="text" placeholder="ชื่อสมาชิก" class="border-2 p-3 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-primary">
+                <input id="member-form-phone" type="tel" inputmode="numeric" placeholder="เบอร์โทร (ไม่บังคับ)" class="border-2 p-3 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-primary">
+                <input id="member-form-points" type="number" min="0" placeholder="แต้มเริ่มต้น" class="border-2 p-3 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-primary">
+            </div>
+            <div class="flex gap-2 mb-4">
+                <button onclick="saveMemberFromSystem()" class="flex-1 bg-slate-900 text-white py-3 rounded-xl font-black text-xs active:scale-95">💾 บันทึกสมาชิก</button>
+                <button onclick="resetMemberForm()" class="px-4 bg-gray-100 text-gray-600 py-3 rounded-xl font-black text-xs active:scale-95">ล้างฟอร์ม</button>
+            </div>
+            <input id="member-form-id" type="hidden">
+            <div id="member-admin-list" class="space-y-2"></div>
+        </div>
+
+        <div class="bg-white p-5 rounded-[24px] border shadow-sm mb-6">
+            <h3 class="font-black text-base text-slate-800 mb-1">🎁 ตั้งค่าโปรโมชั่นสมาชิก</h3>
+            <p class="text-[10px] text-slate-500 font-bold mb-3">กำหนดข้อความโปรและอัตราสะสมแต้ม</p>
+            <div class="space-y-2">
+                <input id="promo-title" type="text" placeholder="ชื่อโปรโมชั่น เช่น สมัครวันนี้รับเพิ่ม 20 แต้ม" class="w-full border-2 p-3 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-primary">
+                <textarea id="promo-detail" rows="2" placeholder="รายละเอียดโปรโมชั่น" class="w-full border-2 p-3 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-primary"></textarea>
+                <div class="flex items-center gap-2">
+                    <input id="promo-point-rate" type="number" min="0" step="0.01" placeholder="แต้มต่อยอดซื้อ 1 บาท" class="flex-1 border-2 p-3 rounded-xl text-sm font-bold bg-gray-50 outline-none focus:border-primary">
+                    <button onclick="savePromotionSettings()" class="bg-amber-500 text-white px-4 py-3 rounded-xl font-black text-xs active:scale-95">บันทึกโปร</button>
+                </div>
+            </div>
+        </div>
     </section>
     <!--** screen-system close -->
 
@@ -531,12 +568,17 @@
             </div>
             <div class="p-5 bg-white border-t relative z-10">
                 <div class="mb-3 bg-gray-50 border border-gray-200 rounded-2xl p-3">
-                    <label for="checkout-member-phone" class="text-[10px] text-gray-500 font-black uppercase tracking-wider block mb-2">สมาชิก (ไม่บังคับ)</label>
-                    <div class="flex gap-2 mb-2">
-                        <input id="checkout-member-phone" type="tel" inputmode="numeric" placeholder="เบอร์โทรสมาชิก" class="flex-1 border-2 p-3 rounded-xl text-sm font-bold bg-white outline-none focus:border-primary" oninput="lookupMemberByPhone(this.value)">
-                        <button onclick="applyCheckoutMemberPhone()" class="px-3 rounded-xl bg-slate-800 text-white text-[11px] font-black active:scale-95">ค้นหา</button>
+                    <button onclick="toggleCheckoutMemberSection()" class="w-full flex items-center justify-between gap-2 bg-white border border-gray-200 px-3 py-2.5 rounded-xl">
+                        <span class="text-[11px] text-gray-600 font-black uppercase tracking-wider">ลูกค้าเป็นสมาชิก</span>
+                        <span id="checkout-member-toggle-label" class="text-[10px] font-black text-primary">กดเพื่อกรอก</span>
+                    </button>
+                    <div id="checkout-member-fields" class="hidden mt-2">
+                        <label for="checkout-member-keyword" class="text-[10px] text-gray-500 font-black uppercase tracking-wider block mb-2">กรอกเบอร์โทร หรือชื่อสมาชิก</label>
+                        <div class="flex gap-2 mb-2">
+                            <input id="checkout-member-keyword" type="text" placeholder="เบอร์โทร หรือ ชื่อสมาชิก" class="flex-1 border-2 p-3 rounded-xl text-sm font-bold bg-white outline-none focus:border-primary" oninput="lookupCheckoutMember(this.value)">
+                            <button onclick="applyCheckoutMemberLookup()" class="px-3 rounded-xl bg-slate-800 text-white text-[11px] font-black active:scale-95">ค้นหา</button>
+                        </div>
                     </div>
-                    <input id="checkout-member-name" type="text" placeholder="ชื่อสมาชิก (แก้ไขได้)" class="w-full border-2 p-3 rounded-xl text-sm font-bold bg-white outline-none focus:border-primary" oninput="markCheckoutMemberDirty()">
                     <p id="checkout-member-hint" class="text-[10px] text-gray-400 font-bold mt-2">ไม่กรอก = ลูกค้าทั่วไป</p>
                 </div>
                 <div id="checkout-payment-buttons" class="flex gap-2 mb-2">
