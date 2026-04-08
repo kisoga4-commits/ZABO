@@ -530,6 +530,15 @@
                 <p id="qr-status-text" class="text-[9px] text-gray-400 mt-2"></p>
             </div>
             <div class="p-5 bg-white border-t relative z-10">
+                <div class="mb-3 bg-gray-50 border border-gray-200 rounded-2xl p-3">
+                    <label for="checkout-member-phone" class="text-[10px] text-gray-500 font-black uppercase tracking-wider block mb-2">สมาชิก (ไม่บังคับ)</label>
+                    <div class="flex gap-2 mb-2">
+                        <input id="checkout-member-phone" type="tel" inputmode="numeric" placeholder="เบอร์โทรสมาชิก" class="flex-1 border-2 p-3 rounded-xl text-sm font-bold bg-white outline-none focus:border-primary" oninput="lookupMemberByPhone(this.value)">
+                        <button onclick="applyCheckoutMemberPhone()" class="px-3 rounded-xl bg-slate-800 text-white text-[11px] font-black active:scale-95">ค้นหา</button>
+                    </div>
+                    <input id="checkout-member-name" type="text" placeholder="ชื่อสมาชิก (แก้ไขได้)" class="w-full border-2 p-3 rounded-xl text-sm font-bold bg-white outline-none focus:border-primary" oninput="markCheckoutMemberDirty()">
+                    <p id="checkout-member-hint" class="text-[10px] text-gray-400 font-bold mt-2">ไม่กรอก = ลูกค้าทั่วไป</p>
+                </div>
                 <div id="checkout-payment-buttons" class="flex gap-2 mb-2">
                     <button onclick="confirmPayment('cash')" class="flex-1 bg-emerald-500 text-white py-4 rounded-[20px] font-black shadow-lg text-sm active:scale-95">💵 เงินสด</button>
                     <button onclick="confirmPayment('transfer')" class="flex-1 bg-blue-500 text-white py-4 rounded-[20px] font-black shadow-lg text-sm active:scale-95">📱 โอน/QR</button>
