@@ -110,6 +110,10 @@
         grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
       }
 
+      .grid.menu-admin {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+
       .menu-card img {
         width: 100%;
         height: 140px;
@@ -133,6 +137,33 @@
 
       .price {
         font-weight: 700;
+      }
+
+      .order-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        border-bottom: 1px dashed var(--line);
+        padding: 0.5rem 0;
+      }
+
+      .qty-pill {
+        padding: 0.1rem 0.45rem;
+        border-radius: 99px;
+        background: #ecfeff;
+        color: #0e7490;
+        font-size: 0.75rem;
+      }
+
+      .customer-switch {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(100px, 1fr));
+        gap: 0.5rem;
+      }
+
+      .customer-switch button.active {
+        background: var(--accent);
       }
 
       label {
@@ -173,6 +204,12 @@
 
       .button-danger {
         background: var(--danger);
+      }
+
+      .button-small {
+        width: auto;
+        padding: 0.35rem 0.6rem;
+        font-size: 0.82rem;
       }
 
       .input-grid {
@@ -253,7 +290,7 @@
       <div class="header-wrap">
         <div>
           <div class="brand">🍽️ ZABO Prototype (Food + Drink)</div>
-          <small>UI Flow เตรียมต่อ Firebase RTDB + Python Backend</small>
+          <small>Mock Flow เท่านั้น: ยังไม่เชื่อม Firebase และ Python backend</small>
         </div>
         <nav id="nav"></nav>
       </div>
@@ -287,6 +324,13 @@
             image: "https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=1200&q=80"
           },
           {
+            id: "F003",
+            category: "food",
+            name: "สปาเก็ตตี้คาโบนารา",
+            price: 129,
+            image: "https://images.unsplash.com/photo-1473093226795-af9932fe5856?auto=format&fit=crop&w=1200&q=80"
+          },
+          {
             id: "D001",
             category: "drink",
             name: "ชาไทยเย็น",
@@ -299,6 +343,13 @@
             name: "เลมอนโซดา",
             price: 65,
             image: "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=1200&q=80"
+          },
+          {
+            id: "D003",
+            category: "drink",
+            name: "อเมริกาโน่เย็น",
+            price: 70,
+            image: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=1200&q=80"
           }
         ],
         members: [
@@ -322,6 +373,15 @@
             points: 120,
             tier: "Silver",
             purchaseHistory: [{ date: "2026-04-06", orderId: "SO-420", total: 155 }]
+          },
+          {
+            id: "M003",
+            fullName: "เมย์ ชอบชานม",
+            phone: "0825557777",
+            password: "5555",
+            points: 70,
+            tier: "Bronze",
+            purchaseHistory: [{ date: "2026-04-02", orderId: "SO-401", total: 120 }]
           }
         ],
         promotions: [
@@ -349,7 +409,6 @@
       };
 
       const dataService = {
-        // NOTE: โครงสร้างนี้เตรียมต่อ Firebase RTDB/Python API ในรอบถัดไป
         getMenu: async () => structuredClone(mockDB.menu),
         getMembers: async () => structuredClone(mockDB.members),
         getPromotions: async () => structuredClone(mockDB.promotions),
@@ -371,7 +430,9 @@
       ];
 
       const state = {
-        currentMember: mockDB.members[0]
+        currentMember: mockDB.members[0],
+        customerType: "guest",
+        orderItems: []
       };
 
       function renderNav(activeRoute) {
@@ -382,6 +443,56 @@
               `<a class="nav-link ${activeRoute === route.id ? "active" : ""}" href="#${route.id}">${route.label}</a>`
           )
           .join("");
+      }
+
+      function addToOrder(itemId) {
+        const menuItem = mockDB.menu.find((item) => item.id === itemId);
+        if (!menuItem) {
+          return;
+        }
+
+        const found = state.orderItems.find((item) => item.id === itemId);
+        if (found) {
+          found.qty += 1;
+        } else {
+          state.orderItems.push({ ...menuItem, qty: 1 });
+        }
+
+        renderStorePage();
+      }
+
+      function setCustomerType(type) {
+        state.customerType = type;
+        renderStorePage();
+      }
+
+      function renderOrderSummary() {
+        const orderTotal = state.orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+
+        if (state.orderItems.length === 0) {
+          return `
+            <div class="note">ยังไม่มีสินค้าในออเดอร์ ลองเพิ่มเมนู food หรือ drink เพื่อทดสอบ flow.</div>
+          `;
+        }
+
+        const rows = state.orderItems
+          .map(
+            (item) => `
+              <div class="order-row">
+                <div>
+                  <div><strong>${item.name}</strong></div>
+                  <small class="muted">${item.category} • ฿${item.price}</small>
+                </div>
+                <div style="text-align:right">
+                  <span class="qty-pill">x${item.qty}</span>
+                  <div>฿${(item.price * item.qty).toLocaleString()}</div>
+                </div>
+              </div>
+            `
+          )
+          .join("");
+
+        return `${rows}<div style="padding-top:0.8rem"><strong>รวมทั้งสิ้น: ฿${orderTotal.toLocaleString()}</strong></div>`;
       }
 
       async function renderStorePage() {
@@ -398,6 +509,7 @@
                   <span class="badge">${item.category.toUpperCase()}</span>
                   <h4>${item.name}</h4>
                   <div class="price">฿${item.price.toLocaleString()}</div>
+                  <div style="margin-top:0.7rem"><button class="js-add-order" data-id="${item.id}" type="button">เพิ่มในออเดอร์</button></div>
                 </article>
               `
             )
@@ -406,19 +518,52 @@
         document.querySelector("#store").innerHTML = `
           <div class="card">
             <h2>หน้าร้าน (Storefront)</h2>
-            <p class="muted">โชว์เมนูอาหารและน้ำดื่มในระบบเดียว พร้อมแยกหมวดชัดเจนเพื่อทดสอบ flow ลูกค้า.</p>
+            <p class="muted">เลือกเมนู food + drink ในออเดอร์เดียวกันได้ และทดสอบประเภทลูกค้าได้ทันที.</p>
+            <div class="customer-switch" style="margin-top:0.8rem">
+              <button type="button" class="js-customer-type ${state.customerType === "guest" ? "active" : "button-ghost"}" data-type="guest">Guest</button>
+              <button type="button" class="js-customer-type ${state.customerType === "member" ? "active" : "button-ghost"}" data-type="member">Member</button>
+            </div>
+            ${
+              state.customerType === "member"
+                ? '<div style="margin-top:0.8rem"><button type="button" id="go-login" class="button-ghost">ไปหน้าล็อกอินสมาชิก</button></div>'
+                : '<small class="muted">ลูกค้า guest: สามารถสั่งได้เลยโดยไม่ต้องล็อกอิน</small>'
+            }
           </div>
 
-          <div class="card">
-            <h3>🍛 Food</h3>
-            <div class="grid food-drink">${createMenuCards(food)}</div>
-          </div>
+          <div class="two-col">
+            <div>
+              <div class="card">
+                <h3>🍛 Food</h3>
+                <div class="grid food-drink">${createMenuCards(food)}</div>
+              </div>
 
-          <div class="card">
-            <h3>🥤 Drink</h3>
-            <div class="grid food-drink">${createMenuCards(drink)}</div>
+              <div class="card">
+                <h3>🥤 Drink</h3>
+                <div class="grid food-drink">${createMenuCards(drink)}</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>สรุปรายการสั่งซื้อ</h3>
+              ${renderOrderSummary()}
+            </div>
           </div>
         `;
+
+        document.querySelectorAll(".js-add-order").forEach((button) => {
+          button.addEventListener("click", () => addToOrder(button.dataset.id));
+        });
+
+        document.querySelectorAll(".js-customer-type").forEach((button) => {
+          button.addEventListener("click", () => setCustomerType(button.dataset.type));
+        });
+
+        const goLoginButton = document.querySelector("#go-login");
+        if (goLoginButton) {
+          goLoginButton.addEventListener("click", () => {
+            location.hash = "#login";
+          });
+        }
       }
 
       function renderLoginPage() {
@@ -468,6 +613,7 @@
           }
 
           state.currentMember = member;
+          state.customerType = "member";
           location.hash = "#profile";
         });
       }
@@ -532,18 +678,22 @@
 
       async function renderBackofficePage() {
         const sales = await dataService.getSales();
+        const menu = await dataService.getMenu();
+        const members = await dataService.getMembers();
+        const promotions = await dataService.getPromotions();
+
         document.querySelector("#backoffice").innerHTML = `
           <div class="card">
             <h2>หน้าหลังร้าน (Back Office)</h2>
             <p class="muted">ศูนย์รวมจัดการเมนู สมาชิก โปรโมชั่น และภาพรวมยอดขาย.</p>
             <div class="kpis">
+              <div class="kpi"><small>จำนวนเมนู</small><strong>${menu.length}</strong></div>
+              <div class="kpi"><small>สมาชิกทั้งหมด</small><strong>${members.length}</strong></div>
+              <div class="kpi"><small>โปรโมชั่นที่แสดง</small><strong>${promotions.length}</strong></div>
               <div class="kpi"><small>ออเดอร์วันนี้</small><strong>${sales.todayOrders}</strong></div>
               <div class="kpi"><small>ยอดขายวันนี้</small><strong>฿${sales.todayRevenue.toLocaleString()}</strong></div>
               <div class="kpi"><small>ยอดต่อบิลเฉลี่ย</small><strong>฿${sales.avgBill.toLocaleString()}</strong></div>
               <div class="kpi"><small>เมนูขายดี</small><strong>${sales.topMenu}</strong></div>
-            </div>
-            <div class="note" style="margin-top:0.8rem">
-              ลิงก์ flow: ไปที่หน้าจัดการเมนู / สมาชิก / โปรโมชั่น ผ่านเมนูบนสุด เพื่อจำลองการทำงาน staff.
             </div>
           </div>
         `;
@@ -551,19 +701,38 @@
 
       async function renderMenuAdminPage() {
         const menu = await dataService.getMenu();
-        const rows = menu
+        const foodCards = menu
+          .filter((item) => item.category === "food")
           .map(
             (item) => `
-              <tr>
-                <td>${item.id}</td>
-                <td>${item.name}</td>
-                <td>${item.category}</td>
-                <td>฿${item.price}</td>
-                <td class="table-actions">
-                  <button class="button-ghost" type="button">แก้ไข</button>
-                  <button class="button-danger" type="button">ลบ</button>
-                </td>
-              </tr>
+              <article class="card menu-card">
+                <img src="${item.image}" alt="${item.name}" />
+                <span class="badge">${item.id}</span>
+                <h4>${item.name}</h4>
+                <div class="price">฿${item.price.toLocaleString()}</div>
+                <div class="table-actions" style="margin-top:0.7rem">
+                  <button class="button-ghost button-small" type="button">แก้ไข</button>
+                  <button class="button-danger button-small" type="button">ลบ</button>
+                </div>
+              </article>
+            `
+          )
+          .join("");
+
+        const drinkCards = menu
+          .filter((item) => item.category === "drink")
+          .map(
+            (item) => `
+              <article class="card menu-card">
+                <img src="${item.image}" alt="${item.name}" />
+                <span class="badge">${item.id}</span>
+                <h4>${item.name}</h4>
+                <div class="price">฿${item.price.toLocaleString()}</div>
+                <div class="table-actions" style="margin-top:0.7rem">
+                  <button class="button-ghost button-small" type="button">แก้ไข</button>
+                  <button class="button-danger button-small" type="button">ลบ</button>
+                </div>
+              </article>
             `
           )
           .join("");
@@ -571,52 +740,17 @@
         document.querySelector("#menu-admin").innerHTML = `
           <div class="card">
             <h2>หน้าจัดการเมนู</h2>
-            <p class="muted">เพิ่ม/แก้ไข/ลบเมนู โดยรองรับหมวด <strong>food</strong> และ <strong>drink</strong> ในระบบเดียว.</p>
-          </div>
-
-          <div class="two-col">
-            <form class="card">
-              <h3>เพิ่มเมนูใหม่ (prototype)</h3>
-              <div class="input-grid">
-                <div>
-                  <label>ชื่อเมนู</label>
-                  <input placeholder="เช่น อเมริกาโน่เย็น" />
-                </div>
-                <div>
-                  <label>หมวดหมู่</label>
-                  <select>
-                    <option>food</option>
-                    <option>drink</option>
-                  </select>
-                </div>
-                <div>
-                  <label>ราคา</label>
-                  <input type="number" placeholder="65" />
-                </div>
-                <div>
-                  <label>URL รูปภาพ</label>
-                  <input placeholder="https://..." />
-                </div>
-              </div>
-              <div style="margin-top:0.8rem"><button type="button">บันทึก (mock)</button></div>
-            </form>
-
-            <div class="card">
-              <h3>แนวทางเชื่อมระบบรอบถัดไป</h3>
-              <ul>
-                <li>POST/PUT/DELETE ไป Python backend API</li>
-                <li>sync รายการเมนูลง Firebase RTDB</li>
-                <li>upload รูปไป storage และเก็บ URL</li>
-              </ul>
-            </div>
+            <p class="muted">แยกรายการเมนูตามหมวด food และ drink เพื่อทดสอบ flow หลังร้าน.</p>
           </div>
 
           <div class="card">
-            <h3>รายการเมนูทั้งหมด</h3>
-            <table>
-              <thead><tr><th>ID</th><th>ชื่อ</th><th>หมวด</th><th>ราคา</th><th>จัดการ</th></tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
+            <h3>🍛 Food</h3>
+            <div class="grid menu-admin">${foodCards}</div>
+          </div>
+
+          <div class="card">
+            <h3>🥤 Drink</h3>
+            <div class="grid menu-admin">${drinkCards}</div>
           </div>
         `;
       }
@@ -632,6 +766,7 @@
                 <td>${member.phone}</td>
                 <td>${member.points}</td>
                 <td>${member.tier}</td>
+                <td><button type="button" class="button-danger button-small">Reset Password</button></td>
               </tr>
             `
           )
@@ -640,18 +775,13 @@
         document.querySelector("#member-admin").innerHTML = `
           <div class="card">
             <h2>หน้าจัดการสมาชิก</h2>
-            <p class="muted">จัดการข้อมูลสมาชิก แต้มสะสม และสถานะสมาชิก.</p>
-            <div class="input-grid">
-              <button type="button">เพิ่มสมาชิกใหม่ (mock)</button>
-              <button type="button" class="button-ghost">ปรับแต้มสมาชิก (mock)</button>
-              <button type="button" class="button-ghost">ดูประวัติซื้อทั้งหมด (mock)</button>
-            </div>
+            <p class="muted">รายการสมาชิกตัวอย่าง พร้อมปุ่ม reset password (mock).</p>
           </div>
 
           <div class="card">
             <h3>รายการสมาชิก</h3>
             <table>
-              <thead><tr><th>ID</th><th>ชื่อ</th><th>เบอร์โทร</th><th>แต้ม</th><th>Tier</th></tr></thead>
+              <thead><tr><th>ID</th><th>ชื่อ</th><th>เบอร์โทร</th><th>แต้ม</th><th>Tier</th><th>จัดการ</th></tr></thead>
               <tbody>${rows}</tbody>
             </table>
           </div>
@@ -676,30 +806,7 @@
         document.querySelector("#promo-admin").innerHTML = `
           <div class="card">
             <h2>หน้าจัดการโปรโมชั่น</h2>
-            <p class="muted">สร้างและจัดการแคมเปญ promotion ให้ลูกค้าทั่วไป/สมาชิก.</p>
-            <form class="input-grid">
-              <div>
-                <label>ชื่อโปรโมชั่น</label>
-                <input placeholder="ลด 10% เมนู drink" />
-              </div>
-              <div>
-                <label>ประเภท</label>
-                <select>
-                  <option>drink</option>
-                  <option>food</option>
-                  <option>member</option>
-                </select>
-              </div>
-              <div>
-                <label>วันหมดอายุ</label>
-                <input type="date" />
-              </div>
-              <div>
-                <label>รายละเอียด</label>
-                <textarea placeholder="เงื่อนไขโปรโมชั่น..."></textarea>
-              </div>
-            </form>
-            <div style="margin-top: 0.8rem"><button type="button">บันทึกโปรโมชั่น (mock)</button></div>
+            <p class="muted">รายการโปรโมชั่นทั้งหมดแบบ mock data (ยังไม่ผูกฐานข้อมูล).</p>
           </div>
 
           <div class="card">
