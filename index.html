@@ -3,18 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ZABO | Restaurant + Drink Prototype</title>
+    <title>ZABO v2 | Restaurant & Drink UI Flow Prototype</title>
     <style>
       :root {
-        --bg: #f6f8fb;
+        --bg: #f4f7fb;
         --card: #ffffff;
-        --line: #dde4ee;
-        --text: #1f2937;
-        --muted: #6b7280;
-        --primary: #0f766e;
-        --primary-soft: #ccfbf1;
+        --line: #d8e1ef;
+        --text: #0f172a;
+        --muted: #64748b;
+        --brand: #0f766e;
+        --brand-soft: #ccfbf1;
         --accent: #7c3aed;
         --danger: #dc2626;
+        --warn: #d97706;
       }
 
       * {
@@ -24,57 +25,52 @@
       body {
         margin: 0;
         font-family: "Inter", "Noto Sans Thai", sans-serif;
-        color: var(--text);
         background: var(--bg);
+        color: var(--text);
       }
 
       header {
-        background: linear-gradient(125deg, #115e59, #7c3aed);
-        color: white;
-        padding: 1rem;
         position: sticky;
         top: 0;
-        z-index: 9;
+        z-index: 10;
+        background: linear-gradient(130deg, #115e59, #7c3aed);
+        color: #fff;
+        padding: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
       }
 
       .header-wrap {
-        max-width: 1200px;
+        max-width: 1240px;
         margin: 0 auto;
         display: flex;
-        justify-content: space-between;
-        align-items: center;
         gap: 1rem;
+        align-items: center;
+        justify-content: space-between;
         flex-wrap: wrap;
-      }
-
-      .brand {
-        font-size: 1.2rem;
-        font-weight: 700;
       }
 
       nav {
         display: flex;
+        gap: 0.5rem;
         flex-wrap: wrap;
-        gap: 0.45rem;
       }
 
       .nav-link {
-        border: 1px solid rgba(255, 255, 255, 0.35);
-        padding: 0.45rem 0.7rem;
-        border-radius: 999px;
-        color: white;
+        color: #fff;
         text-decoration: none;
-        font-size: 0.85rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.45);
+        padding: 0.42rem 0.74rem;
+        font-size: 0.84rem;
       }
 
       .nav-link.active {
-        background: white;
-        color: var(--primary);
-        border-color: white;
+        background: #fff;
+        color: var(--brand);
       }
 
       main {
-        max-width: 1200px;
+        max-width: 1240px;
         margin: 1rem auto 2rem;
         padding: 0 1rem;
       }
@@ -95,109 +91,120 @@
         margin-bottom: 1rem;
       }
 
-      .two-col {
+      .muted {
+        color: var(--muted);
+      }
+
+      .note {
+        background: #f5f3ff;
+        border-left: 4px solid var(--accent);
+        color: #4c1d95;
+        border-radius: 8px;
+        padding: 0.72rem 0.85rem;
+      }
+
+      .kpis {
         display: grid;
-        grid-template-columns: 1.2fr 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 0.7rem;
+      }
+
+      .kpi {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #f8fafc;
+        padding: 0.8rem;
+      }
+
+      .kpi strong {
+        display: block;
+        font-size: 1.15rem;
+        margin-top: 0.3rem;
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
         gap: 1rem;
       }
 
-      .grid {
+      .tab-row,
+      .type-row,
+      .status-row {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .tab-row button,
+      .type-row button,
+      .status-row button {
+        width: auto;
+      }
+
+      .active-pill {
+        background: var(--accent);
+      }
+
+      .menu-grid {
         display: grid;
-        gap: 1rem;
-      }
-
-      .grid.food-drink {
-        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-      }
-
-      .grid.menu-admin {
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.9rem;
       }
 
       .menu-card img {
         width: 100%;
-        height: 140px;
+        height: 138px;
         object-fit: cover;
-        border-radius: 12px;
-      }
-
-      .menu-card h4 {
-        margin: 0.75rem 0 0.2rem;
+        border-radius: 11px;
       }
 
       .badge {
         display: inline-block;
-        padding: 0.15rem 0.55rem;
         border-radius: 999px;
-        font-size: 0.78rem;
-        background: var(--primary-soft);
-        color: var(--primary);
-        margin-bottom: 0.4rem;
+        padding: 0.16rem 0.52rem;
+        font-size: 0.76rem;
+        background: var(--brand-soft);
+        color: var(--brand);
+        margin: 0.45rem 0;
       }
 
-      .price {
-        font-weight: 700;
-      }
-
-      .order-row {
+      .order-line {
         display: flex;
         justify-content: space-between;
-        align-items: center;
         gap: 0.5rem;
         border-bottom: 1px dashed var(--line);
         padding: 0.5rem 0;
       }
 
-      .qty-pill {
-        padding: 0.1rem 0.45rem;
-        border-radius: 99px;
+      .qty {
+        border-radius: 999px;
         background: #ecfeff;
-        color: #0e7490;
+        color: #155e75;
         font-size: 0.75rem;
-      }
-
-      .customer-switch {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(100px, 1fr));
-        gap: 0.5rem;
-      }
-
-      .customer-switch button.active {
-        background: var(--accent);
-      }
-
-      label {
-        display: block;
-        margin-bottom: 0.25rem;
-        font-size: 0.85rem;
-        color: var(--muted);
+        padding: 0.1rem 0.4rem;
       }
 
       input,
       select,
-      textarea,
       button {
         width: 100%;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 0.65rem 0.7rem;
         font: inherit;
-      }
-
-      textarea {
-        min-height: 92px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        padding: 0.62rem 0.72rem;
       }
 
       button {
-        cursor: pointer;
         border: none;
-        background: var(--primary);
-        color: white;
+        background: var(--brand);
+        color: #fff;
         font-weight: 600;
+        cursor: pointer;
       }
 
       .button-ghost {
-        background: white;
+        background: #fff;
         color: var(--text);
         border: 1px solid var(--line);
       }
@@ -206,39 +213,20 @@
         background: var(--danger);
       }
 
+      .button-warning {
+        background: var(--warn);
+      }
+
       .button-small {
         width: auto;
-        padding: 0.35rem 0.6rem;
+        padding: 0.32rem 0.56rem;
         font-size: 0.82rem;
       }
 
-      .input-grid {
+      .inline-form {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 0.75rem;
-      }
-
-      .kpis {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-        gap: 0.75rem;
-      }
-
-      .kpi {
-        background: #f8fafc;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 0.8rem;
-      }
-
-      .kpi small {
-        color: var(--muted);
-      }
-
-      .kpi strong {
-        display: block;
-        margin-top: 0.35rem;
-        font-size: 1.2rem;
+        gap: 0.65rem;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       }
 
       table {
@@ -250,36 +238,18 @@
       td {
         border-bottom: 1px solid var(--line);
         text-align: left;
-        padding: 0.6rem 0.2rem;
-        font-size: 0.92rem;
-      }
-
-      .table-actions {
-        display: flex;
-        gap: 0.35rem;
-      }
-
-      .table-actions button {
-        width: auto;
-        padding: 0.4rem 0.6rem;
-        font-size: 0.8rem;
-      }
-
-      .note {
-        border-left: 4px solid var(--accent);
-        background: #f5f3ff;
-        padding: 0.7rem 0.8rem;
-        border-radius: 8px;
-        color: #4c1d95;
+        padding: 0.56rem 0.26rem;
         font-size: 0.9rem;
+        vertical-align: top;
       }
 
-      .muted {
-        color: var(--muted);
-      }
+      .status-new { color: #2563eb; font-weight: 700; }
+      .status-cooking { color: #d97706; font-weight: 700; }
+      .status-ready { color: #059669; font-weight: 700; }
+      .status-paid { color: #475569; font-weight: 700; }
 
-      @media (max-width: 920px) {
-        .two-col {
+      @media (max-width: 960px) {
+        .split {
           grid-template-columns: 1fr;
         }
       }
@@ -289,706 +259,553 @@
     <header>
       <div class="header-wrap">
         <div>
-          <div class="brand">🍽️ ZABO Prototype (Food + Drink)</div>
-          <small>Mock Flow เท่านั้น: ยังไม่เชื่อม Firebase และ Python backend</small>
+          <div style="font-size: 1.2rem; font-weight: 700">🍽️ ZABO v2 Prototype (รื้อระบบใหม่)</div>
+          <small>Mock data + mock realtime flow (ยังไม่ต่อ Firebase RTDB / Python backend)</small>
         </div>
         <nav id="nav"></nav>
       </div>
     </header>
 
     <main>
-      <section id="store" class="screen"></section>
-      <section id="login" class="screen"></section>
-      <section id="profile" class="screen"></section>
-      <section id="backoffice" class="screen"></section>
-      <section id="menu-admin" class="screen"></section>
-      <section id="member-admin" class="screen"></section>
-      <section id="promo-admin" class="screen"></section>
+      <section id="customer-order" class="screen"></section>
+      <section id="member-login" class="screen"></section>
+      <section id="kitchen-orders" class="screen"></section>
+      <section id="admin-dashboard" class="screen"></section>
+      <section id="menu-management" class="screen"></section>
+      <section id="member-management" class="screen"></section>
+      <section id="promo-management" class="screen"></section>
+      <section id="sales-report" class="screen"></section>
     </main>
 
     <script>
-      const store = {
+      const app = {
         menus: [
-          {
-            id: "F001",
-            name: "ข้าวกะเพราหมูกรอบ",
-            price: 89,
-            image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=1200&q=80",
-            category: "food",
-            active: true
-          },
-          {
-            id: "F002",
-            name: "ผัดไทยกุ้งสด",
-            price: 95,
-            image: "https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=1200&q=80",
-            category: "food",
-            active: true
-          },
-          {
-            id: "F003",
-            name: "สปาเก็ตตี้คาโบนารา",
-            price: 129,
-            image: "https://images.unsplash.com/photo-1473093226795-af9932fe5856?auto=format&fit=crop&w=1200&q=80",
-            category: "food",
-            active: true
-          },
-          {
-            id: "D001",
-            name: "ชาไทยเย็น",
-            price: 55,
-            image: "https://images.unsplash.com/photo-1542444459-db63c1f9f0f6?auto=format&fit=crop&w=1200&q=80",
-            category: "drink",
-            active: true
-          },
-          {
-            id: "D002",
-            name: "เลมอนโซดา",
-            price: 65,
-            image: "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=1200&q=80",
-            category: "drink",
-            active: true
-          },
-          {
-            id: "D003",
-            name: "อเมริกาโน่เย็น",
-            price: 70,
-            image: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=1200&q=80",
-            category: "drink",
-            active: false
-          }
+          { id: "F001", name: "ข้าวกะเพราหมูกรอบ", price: 89, category: "food", active: true, image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=900&q=80" },
+          { id: "F002", name: "ผัดไทยกุ้งสด", price: 95, category: "food", active: true, image: "https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=900&q=80" },
+          { id: "F003", name: "ข้าวหน้าไก่เทอริยากิ", price: 99, category: "food", active: true, image: "https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=900&q=80" },
+          { id: "D001", name: "ชาไทยเย็น", price: 55, category: "drink", active: true, image: "https://images.unsplash.com/photo-1542444459-db63c1f9f0f6?auto=format&fit=crop&w=900&q=80" },
+          { id: "D002", name: "เลมอนโซดา", price: 65, category: "drink", active: true, image: "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=900&q=80" },
+          { id: "D003", name: "อเมริกาโน่เย็น", price: 70, category: "drink", active: true, image: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=900&q=80" }
         ],
         members: [
-          {
-            id: "M001",
-            name: "พลอย สายชิม",
-            phone: "0899991111",
-            password: "1234",
-            points: 230,
-            status: "active",
-            mustChangePassword: false
-          },
-          {
-            id: "M002",
-            name: "นนท์ กินเพลิน",
-            phone: "0812223333",
-            password: "9999",
-            points: 120,
-            status: "active",
-            mustChangePassword: false
-          },
-          {
-            id: "M003",
-            name: "เมย์ ชอบชานม",
-            phone: "0825557777",
-            password: "5555",
-            points: 70,
-            status: "inactive",
-            mustChangePassword: true
-          }
+          { id: "M001", name: "พลอย สายชิม", phone: "0899991111", password: "1234", points: 240, status: "active", mustChangePassword: false },
+          { id: "M002", name: "นนท์ กินเพลิน", phone: "0812223333", password: "9999", points: 110, status: "active", mustChangePassword: false },
+          { id: "M003", name: "เมย์ ชอบชานม", phone: "0825557777", password: "5555", points: 40, status: "inactive", mustChangePassword: true }
         ],
-        promotions: [
-          { id: "P001", title: "ลดเครื่องดื่ม 15%", type: "percent", value: 15, active: true },
-          { id: "P002", title: "ส่วนลดอาหาร 30 บาท", type: "fixed", value: 30, active: true },
-          { id: "P003", title: "โปรสมาชิกพิเศษ", type: "percent", value: 10, active: false }
+        promos: [
+          { id: "P001", title: "ลด 10% ทุกเมนู", type: "percent", value: 10, active: true },
+          { id: "P002", title: "ลดเครื่องดื่ม 20 บาท", type: "fixed", value: 20, active: false }
         ],
         orders: [
-          {
-            id: "SO-412",
-            customerType: "member",
-            memberId: "M001",
-            items: [{ menuId: "F001", qty: 1 }, { menuId: "D001", qty: 1 }],
-            subtotal: 144,
-            discount: 0,
-            total: 144,
-            status: "paid",
-            createdAt: "2026-04-05T10:00:00Z"
-          },
-          {
-            id: "SO-425",
-            customerType: "member",
-            memberId: "M001",
-            items: [{ menuId: "F002", qty: 2 }],
-            subtotal: 190,
-            discount: 0,
-            total: 190,
-            status: "paid",
-            createdAt: "2026-04-07T12:30:00Z"
-          },
-          {
-            id: "SO-420",
-            customerType: "member",
-            memberId: "M002",
-            items: [{ menuId: "F001", qty: 1 }, { menuId: "D002", qty: 1 }],
-            subtotal: 154,
-            discount: 0,
-            total: 154,
-            status: "paid",
-            createdAt: "2026-04-06T14:00:00Z"
-          }
+          { id: "SO-501", customerType: "member", memberId: "M001", items: [{ menuId: "F001", qty: 1 }, { menuId: "D001", qty: 1 }], subtotal: 144, discount: 14, total: 130, status: "paid", createdAt: "2026-04-06T08:20:00Z" },
+          { id: "SO-502", customerType: "guest", memberId: null, items: [{ menuId: "F002", qty: 2 }], subtotal: 190, discount: 19, total: 171, status: "ready", createdAt: "2026-04-08T09:10:00Z" }
         ]
       };
 
       const routes = [
-        { id: "store", label: "หน้าร้าน" },
-        { id: "login", label: "ล็อกอินสมาชิก" },
-        { id: "profile", label: "โปรไฟล์สมาชิก" },
-        { id: "backoffice", label: "หน้าหลังร้าน" },
-        { id: "menu-admin", label: "จัดการเมนู" },
-        { id: "member-admin", label: "จัดการสมาชิก" },
-        { id: "promo-admin", label: "จัดการโปรโมชั่น" }
+        { id: "customer-order", label: "ลูกค้าสั่งเมนู" },
+        { id: "member-login", label: "ล็อกอิน member" },
+        { id: "kitchen-orders", label: "หน้าร้านรับออเดอร์" },
+        { id: "admin-dashboard", label: "admin dashboard" },
+        { id: "menu-management", label: "จัดการเมนู" },
+        { id: "member-management", label: "จัดการสมาชิก" },
+        { id: "promo-management", label: "จัดการโปรโมชั่น" },
+        { id: "sales-report", label: "ดูยอดขาย" }
       ];
 
       const state = {
-        currentMemberId: "M001",
+        cart: [],
+        menuTab: "food",
         customerType: "guest",
-        orderItems: [],
-        menuTab: "all"
+        currentMemberId: null,
+        kitchenFilter: "all",
+        salesFilter: "all",
+        lastNewOrderId: null
       };
 
-      const getCurrentMember = () => store.members.find((member) => member.id === state.currentMemberId) ?? null;
-      const getMenuById = (menuId) => store.menus.find((menu) => menu.id === menuId);
+      const byId = (id) => document.querySelector(`#${id}`);
+      const menuById = (id) => app.menus.find((item) => item.id === id);
+      const memberById = (id) => app.members.find((item) => item.id === id);
+      const activePromo = () => app.promos.find((promo) => promo.active) ?? null;
+      const currentMember = () => (state.currentMemberId ? memberById(state.currentMemberId) : null);
 
-      function getDashboardSummary() {
-        const paidOrders = store.orders.filter((order) => order.status === "paid");
-        let foodSales = 0;
-        let drinkSales = 0;
-        paidOrders.forEach((order) => {
-          order.items.forEach((item) => {
-            const menu = getMenuById(item.menuId);
-            if (!menu) {
-              return;
-            }
-            const lineTotal = menu.price * item.qty;
-            if (menu.category === "food") {
-              foodSales += lineTotal;
-            } else {
-              drinkSales += lineTotal;
-            }
-          });
-        });
-        return {
-          totalSales: paidOrders.reduce((sum, order) => sum + order.total, 0),
-          foodSales,
-          drinkSales,
-          membersCount: store.members.length,
-          menusCount: store.menus.length,
-          promotionsCount: store.promotions.length
-        };
+      function setRoute(routeId) {
+        const safe = routes.some((route) => route.id === routeId) ? routeId : "customer-order";
+        document.querySelectorAll(".screen").forEach((screen) => screen.classList.remove("active"));
+        byId(safe).classList.add("active");
+        renderNav(safe);
       }
 
-      function renderNav(activeRoute) {
-        const nav = document.querySelector("#nav");
-        nav.innerHTML = routes
-          .map(
-            (route) =>
-              `<a class="nav-link ${activeRoute === route.id ? "active" : ""}" href="#${route.id}">${route.label}</a>`
-          )
+      function renderNav(activeId) {
+        byId("nav").innerHTML = routes
+          .map((route) => `<a class="nav-link ${route.id === activeId ? "active" : ""}" href="#${route.id}">${route.label}</a>`)
           .join("");
       }
 
-      function addToOrder(itemId) {
-        const menuItem = getMenuById(itemId);
-        if (!menuItem) {
-          return;
-        }
-
-        const found = state.orderItems.find((item) => item.id === itemId);
+      function addCart(menuId) {
+        const found = state.cart.find((line) => line.menuId === menuId);
         if (found) {
           found.qty += 1;
         } else {
-          state.orderItems.push({ ...menuItem, qty: 1 });
+          state.cart.push({ menuId, qty: 1 });
         }
-
-        renderStorePage();
+        renderCustomerOrder();
       }
 
-      function setCustomerType(type) {
-        state.customerType = type;
-        renderStorePage();
-      }
-
-      function setMenuTab(tab) {
-        state.menuTab = tab;
-        renderStorePage();
-      }
-
-      function updateOrderQty(itemId, change) {
-        const found = state.orderItems.find((item) => item.id === itemId);
+      function adjustCart(menuId, delta) {
+        const found = state.cart.find((line) => line.menuId === menuId);
         if (!found) {
           return;
         }
-        found.qty += change;
+        found.qty += delta;
         if (found.qty <= 0) {
-          state.orderItems = state.orderItems.filter((item) => item.id !== itemId);
+          state.cart = state.cart.filter((line) => line.menuId !== menuId);
         }
-        renderStorePage();
+        renderCustomerOrder();
       }
 
-      function removeOrderItem(itemId) {
-        state.orderItems = state.orderItems.filter((item) => item.id !== itemId);
-        renderStorePage();
+      function calcCart() {
+        const subtotal = state.cart.reduce((sum, line) => {
+          const menu = menuById(line.menuId);
+          return sum + (menu ? menu.price * line.qty : 0);
+        }, 0);
+        const promo = activePromo();
+        const discount = promo ? (promo.type === "percent" ? Math.round((subtotal * promo.value) / 100) : promo.value) : 0;
+        return { subtotal, discount: Math.min(discount, subtotal), total: Math.max(0, subtotal - discount), promo };
       }
 
-      function createOrder() {
-        if (state.orderItems.length === 0) {
-          alert("กรุณาเพิ่มสินค้าในออเดอร์ก่อน");
+      function submitOrder() {
+        if (state.cart.length === 0) {
+          alert("กรุณาเลือกสินค้าอย่างน้อย 1 รายการ");
           return;
         }
-        const subtotal = state.orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-        const activePromo = store.promotions.find((promo) => promo.active);
-        const discount =
-          activePromo && activePromo.type === "percent"
-            ? Math.round((subtotal * activePromo.value) / 100)
-            : activePromo && activePromo.type === "fixed"
-              ? activePromo.value
-              : 0;
-        const total = Math.max(0, subtotal - discount);
-        const nextId = `SO-${430 + store.orders.length}`;
-        const newOrder = {
-          id: nextId,
+        if (state.customerType === "member" && !state.currentMemberId) {
+          alert("ลูกค้า member ต้องล็อกอินก่อนยืนยันออเดอร์");
+          location.hash = "#member-login";
+          return;
+        }
+        const bill = calcCart();
+        const id = `SO-${503 + app.orders.length}`;
+        const order = {
+          id,
           customerType: state.customerType,
           memberId: state.customerType === "member" ? state.currentMemberId : null,
-          items: state.orderItems.map((item) => ({ menuId: item.id, qty: item.qty })),
-          subtotal,
-          discount,
-          total,
-          status: "paid",
+          items: state.cart.map((line) => ({ menuId: line.menuId, qty: line.qty })),
+          subtotal: bill.subtotal,
+          discount: bill.discount,
+          total: bill.total,
+          status: "new",
           createdAt: new Date().toISOString()
         };
-        store.orders.unshift(newOrder);
-
-        if (newOrder.memberId) {
-          const member = store.members.find((item) => item.id === newOrder.memberId);
+        app.orders.unshift(order);
+        state.lastNewOrderId = id;
+        if (order.memberId) {
+          const member = memberById(order.memberId);
           if (member) {
-            member.points += Math.floor(total / 25);
+            member.points += Math.floor(order.total / 25);
           }
         }
+        state.cart = [];
+        alert(`ส่งออเดอร์ ${id} เข้าหน้าร้านแล้ว (mock realtime)`);
+        renderAll();
+        location.hash = "#kitchen-orders";
+      }
 
-        state.orderItems = [];
-        alert(`บันทึกออเดอร์ ${nextId} สำเร็จ (mock)`);
+      function orderStatusLabel(status) {
+        return status === "new" ? "ใหม่" : status === "cooking" ? "กำลังทำ" : status === "ready" ? "เสร็จแล้ว" : "จ่ายแล้ว";
+      }
+
+      function statusClass(status) {
+        return status === "new" ? "status-new" : status === "cooking" ? "status-cooking" : status === "ready" ? "status-ready" : "status-paid";
+      }
+
+      function setOrderStatus(orderId, status) {
+        const order = app.orders.find((item) => item.id === orderId);
+        if (!order) {
+          return;
+        }
+        order.status = status;
+        if (status === "paid" && order.memberId) {
+          const member = memberById(order.memberId);
+          if (member) {
+            member.points += Math.floor(order.total / 40);
+          }
+        }
         renderAll();
       }
 
-      function renderOrderSummary() {
-        const subtotal = state.orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-        const activePromo = store.promotions.find((promo) => promo.active);
-        const discount =
-          activePromo && activePromo.type === "percent"
-            ? Math.round((subtotal * activePromo.value) / 100)
-            : activePromo && activePromo.type === "fixed"
-              ? activePromo.value
-              : 0;
-        const total = Math.max(0, subtotal - discount);
+      function renderCustomerOrder() {
+        const availableMenus = app.menus.filter((menu) => menu.active && menu.category === state.menuTab);
+        const cartMeta = calcCart();
+        const member = currentMember();
 
-        if (state.orderItems.length === 0) {
-          return `
-            <div class="note">ยังไม่มีสินค้าในออเดอร์ ลองเพิ่มเมนู food หรือ drink เพื่อทดสอบ flow.</div>
-          `;
-        }
-
-        const rows = state.orderItems
-          .map(
-            (item) => `
-              <div class="order-row">
-                <div>
-                  <div><strong>${item.name}</strong></div>
-                  <small class="muted">${item.category} • ฿${item.price}</small>
-                </div>
-                <div style="text-align:right">
-                  <span class="qty-pill">x${item.qty}</span><br />
-                  <button type="button" class="button-ghost button-small js-qty" data-id="${item.id}" data-change="-1">-</button>
-                  <button type="button" class="button-ghost button-small js-qty" data-id="${item.id}" data-change="1">+</button>
-                  <button type="button" class="button-danger button-small js-remove" data-id="${item.id}">ลบ</button>
-                  <div>฿${(item.price * item.qty).toLocaleString()}</div>
-                </div>
-              </div>
-            `
-          )
-          .join("");
-
-        return `
-          ${rows}
-          <div style="padding-top:0.8rem">
-            <div>ยอดรวม: ฿${subtotal.toLocaleString()}</div>
-            <div>ส่วนลด (${activePromo ? activePromo.title : "ไม่มี"}): -฿${discount.toLocaleString()}</div>
-            <strong>รวมสุทธิ: ฿${total.toLocaleString()}</strong>
-            <div style="margin-top:0.8rem"><button type="button" id="checkout-order">ยืนยันออเดอร์ (mock)</button></div>
-          </div>
-        `;
-      }
-
-      function renderStorePage() {
-        const menu = store.menus.filter((item) => item.active);
-        const filtered =
-          state.menuTab === "all" ? menu : menu.filter((item) => item.category === state.menuTab);
-
-        const createMenuCards = (items) =>
-          items
-            .map(
-              (item) => `
-                <article class="card menu-card">
-                  <img src="${item.image}" alt="${item.name}" />
-                  <span class="badge">${item.category.toUpperCase()}</span>
-                  <h4>${item.name}</h4>
-                  <div class="price">฿${item.price.toLocaleString()}</div>
-                  <div style="margin-top:0.7rem"><button class="js-add-order" data-id="${item.id}" type="button">เพิ่มในออเดอร์</button></div>
-                </article>
-              `
-            )
-            .join("");
-
-        document.querySelector("#store").innerHTML = `
+        byId("customer-order").innerHTML = `
           <div class="card">
-            <h2>หน้าร้าน (Storefront)</h2>
-            <p class="muted">เลือกเมนูจาก mock data เดียวกันกับหลังร้าน และสร้างออเดอร์จำลองได้.</p>
-            <div class="customer-switch" style="margin-top:0.8rem">
-              <button type="button" class="js-customer-type ${state.customerType === "guest" ? "active" : "button-ghost"}" data-type="guest">Guest</button>
-              <button type="button" class="js-customer-type ${state.customerType === "member" ? "active" : "button-ghost"}" data-type="member">Member</button>
+            <h2>หน้าลูกค้าสั่งเมนู</h2>
+            <p class="muted">เลือกเมนูจากแท็บ food / drink, เลือก guest หรือ member แล้วส่งออเดอร์ได้ทันที.</p>
+            <div class="type-row" style="margin-top:0.6rem">
+              <button type="button" class="js-customer ${state.customerType === "guest" ? "active-pill" : "button-ghost"}" data-type="guest">Guest</button>
+              <button type="button" class="js-customer ${state.customerType === "member" ? "active-pill" : "button-ghost"}" data-type="member">Member</button>
             </div>
-            ${
-              state.customerType === "member"
-                ? '<div style="margin-top:0.8rem"><button type="button" id="go-login" class="button-ghost">ไปหน้าล็อกอินสมาชิก</button></div>'
-                : '<small class="muted">ลูกค้า guest: สามารถสั่งได้เลยโดยไม่ต้องล็อกอิน</small>'
-            }
-            <div class="customer-switch" style="margin-top:0.8rem">
-              <button type="button" class="js-menu-tab ${state.menuTab === "all" ? "active" : "button-ghost"}" data-tab="all">ทั้งหมด</button>
-              <button type="button" class="js-menu-tab ${state.menuTab === "food" ? "active" : "button-ghost"}" data-tab="food">Food</button>
-              <button type="button" class="js-menu-tab ${state.menuTab === "drink" ? "active" : "button-ghost"}" data-tab="drink">Drink</button>
+            ${state.customerType === "member" ? `<div style="margin-top:0.7rem"><button type="button" id="go-member-login" class="button-ghost">${member ? `Member: ${member.name} (${member.points} pts)` : "ล็อกอิน member"}</button></div>` : '<small class="muted">Guest สามารถสั่งต่อได้เลย</small>'}
+            <div class="tab-row" style="margin-top:0.7rem">
+              <button type="button" class="js-tab ${state.menuTab === "food" ? "active-pill" : "button-ghost"}" data-tab="food">Food</button>
+              <button type="button" class="js-tab ${state.menuTab === "drink" ? "active-pill" : "button-ghost"}" data-tab="drink">Drink</button>
             </div>
           </div>
 
-          <div class="two-col">
-            <div>
-              <div class="card">
-                <h3>เมนูที่เลือกดู: ${state.menuTab.toUpperCase()}</h3>
-                <div class="grid food-drink">${createMenuCards(filtered)}</div>
+          <div class="split">
+            <div class="card">
+              <h3>เมนู ${state.menuTab.toUpperCase()}</h3>
+              <div class="menu-grid">
+                ${availableMenus.map((menu) => `
+                  <article class="card menu-card" style="margin-bottom:0">
+                    <img src="${menu.image}" alt="${menu.name}" />
+                    <span class="badge">${menu.id}</span>
+                    <h4 style="margin:0.2rem 0">${menu.name}</h4>
+                    <div><strong>฿${menu.price.toLocaleString()}</strong></div>
+                    <div style="margin-top:0.6rem"><button type="button" class="js-add" data-menu-id="${menu.id}">เพิ่มในออเดอร์</button></div>
+                  </article>`).join("")}
               </div>
             </div>
 
             <div class="card">
-              <h3>สรุปรายการสั่งซื้อ</h3>
-              ${renderOrderSummary()}
+              <h3>สรุปออเดอร์</h3>
+              ${state.cart.length === 0 ? '<div class="note">ยังไม่มีสินค้าในตะกร้า</div>' : state.cart.map((line) => {
+                const menu = menuById(line.menuId);
+                return `<div class="order-line"><div><strong>${menu.name}</strong><br /><small class="muted">฿${menu.price}</small></div><div style="text-align:right"><span class="qty">x${line.qty}</span><br /><button class="button-ghost button-small js-qty" data-menu-id="${line.menuId}" data-delta="-1">-</button> <button class="button-ghost button-small js-qty" data-menu-id="${line.menuId}" data-delta="1">+</button></div></div>`;
+              }).join("")}
+              <div style="padding-top:0.65rem">
+                <div>ยอดรวม: ฿${cartMeta.subtotal.toLocaleString()}</div>
+                <div>ส่วนลด: -฿${cartMeta.discount.toLocaleString()} ${cartMeta.promo ? `(${cartMeta.promo.title})` : ""}</div>
+                <strong>รวมสุทธิ: ฿${cartMeta.total.toLocaleString()}</strong>
+              </div>
+              <div style="margin-top:0.8rem"><button id="submit-order" type="button">ยืนยันออเดอร์</button></div>
             </div>
           </div>
         `;
 
-        document.querySelectorAll(".js-add-order").forEach((button) => {
-          button.addEventListener("click", () => addToOrder(button.dataset.id));
-        });
-
-        document.querySelectorAll(".js-customer-type").forEach((button) => {
-          button.addEventListener("click", () => setCustomerType(button.dataset.type));
-        });
-        document.querySelectorAll(".js-menu-tab").forEach((button) => {
-          button.addEventListener("click", () => setMenuTab(button.dataset.tab));
-        });
-        document.querySelectorAll(".js-qty").forEach((button) => {
-          button.addEventListener("click", () => updateOrderQty(button.dataset.id, Number(button.dataset.change)));
-        });
-        document.querySelectorAll(".js-remove").forEach((button) => {
-          button.addEventListener("click", () => removeOrderItem(button.dataset.id));
-        });
-        const checkoutButton = document.querySelector("#checkout-order");
-        if (checkoutButton) {
-          checkoutButton.addEventListener("click", createOrder);
-        }
-
-        const goLoginButton = document.querySelector("#go-login");
-        if (goLoginButton) {
-          goLoginButton.addEventListener("click", () => {
-            location.hash = "#login";
+        document.querySelectorAll(".js-tab").forEach((button) => button.addEventListener("click", () => {
+          state.menuTab = button.dataset.tab;
+          renderCustomerOrder();
+        }));
+        document.querySelectorAll(".js-customer").forEach((button) => button.addEventListener("click", () => {
+          state.customerType = button.dataset.type;
+          renderCustomerOrder();
+        }));
+        document.querySelectorAll(".js-add").forEach((button) => button.addEventListener("click", () => addCart(button.dataset.menuId)));
+        document.querySelectorAll(".js-qty").forEach((button) => button.addEventListener("click", () => adjustCart(button.dataset.menuId, Number(button.dataset.delta))));
+        byId("submit-order").addEventListener("click", submitOrder);
+        const loginButton = byId("go-member-login");
+        if (loginButton) {
+          loginButton.addEventListener("click", () => {
+            location.hash = "#member-login";
           });
         }
       }
 
-      function renderLoginPage() {
-        document.querySelector("#login").innerHTML = `
-          <div class="two-col">
+      function renderMemberLogin() {
+        byId("member-login").innerHTML = `
+          <div class="split">
             <form id="login-form" class="card">
-              <h2>ล็อกอินสมาชิก</h2>
-              <p class="muted">ใช้เบอร์โทร + รหัสผ่าน (mock login) เพื่อเข้าสู่สมาชิก.</p>
-              <div class="input-grid">
-                <div>
-                  <label for="phone">เบอร์โทรศัพท์</label>
-                  <input id="phone" name="phone" placeholder="0812345678" required />
-                </div>
-                <div>
-                  <label for="password">รหัสผ่าน</label>
-                  <input id="password" name="password" type="password" placeholder="••••" required />
-                </div>
+              <h2>หน้าล็อกอิน member</h2>
+              <p class="muted">ล็อกอินด้วยเบอร์โทร + รหัสผ่าน (mock auth)</p>
+              <div class="inline-form" style="grid-template-columns:1fr">
+                <input name="phone" placeholder="เบอร์โทร เช่น 0899991111" required />
+                <input name="password" type="password" placeholder="รหัสผ่าน" required />
               </div>
-              <div style="margin-top: 0.8rem">
-                <button type="submit">เข้าสู่ระบบ</button>
-              </div>
-              <small class="muted">Demo account: 0899991111 / 1234</small>
+              <div style="margin-top:0.7rem"><button type="submit">เข้าสู่ระบบ</button></div>
+              <small class="muted">Demo: 0899991111 / 1234</small>
             </form>
-
             <div class="card">
-              <h3>Flow ที่จะต่อ backend รอบถัดไป</h3>
-              <ol>
-                <li>validate เบอร์โทร + รหัสผ่านจาก Python API</li>
-                <li>ดึงข้อมูลสมาชิกจาก Firebase RTDB</li>
-                <li>สร้าง session/token และโหลดหน้าโปรไฟล์สมาชิก</li>
-              </ol>
-              <p class="note">ตอนนี้ยังเป็น prototype: ไม่มีการบันทึกข้อมูลลงฐานจริง.</p>
+              <h3>แต้มสมาชิก / ใช้แต้ม</h3>
+              ${currentMember() ? `<p><strong>${currentMember().name}</strong> เหลือ ${currentMember().points} แต้ม</p><div class="inline-form"><select id="redeem-choice"><option value="none">ไม่ใช้แต้ม</option><option value="discount-50">ใช้ 100 แต้ม ลด 50 บาท</option><option value="free-drink">ใช้ 150 แต้ม แลกเครื่องดื่ม 1 แก้ว</option></select><button type="button" id="redeem-btn">ยืนยันใช้สิทธิ์</button></div>` : '<p class="note">ยังไม่ได้ล็อกอิน member</p>'}
             </div>
           </div>
         `;
 
-        document.querySelector("#login-form").addEventListener("submit", async (event) => {
+        byId("login-form").addEventListener("submit", (event) => {
           event.preventDefault();
-          const formData = new FormData(event.target);
-          const phone = formData.get("phone").toString().trim();
-          const password = formData.get("password").toString().trim();
-          const member = store.members.find((item) => item.phone === phone && item.password === password);
-
+          const fd = new FormData(event.target);
+          const phone = fd.get("phone").toString().trim();
+          const password = fd.get("password").toString().trim();
+          const member = app.members.find((item) => item.phone === phone && item.password === password);
           if (!member) {
-            alert("ไม่พบข้อมูลสมาชิก กรุณาตรวจสอบเบอร์โทร/รหัสผ่าน");
+            alert("เบอร์โทรหรือรหัสผ่านไม่ถูกต้อง");
             return;
           }
-
           state.currentMemberId = member.id;
           state.customerType = "member";
-          location.hash = "#profile";
+          alert(`ล็อกอินสำเร็จ: ${member.name}`);
+          renderAll();
+          location.hash = "#customer-order";
         });
+
+        const redeemBtn = byId("redeem-btn");
+        if (redeemBtn) {
+          redeemBtn.addEventListener("click", () => {
+            const member = currentMember();
+            const choice = byId("redeem-choice").value;
+            if (!member || choice === "none") {
+              alert("ยังไม่ได้เลือกสิทธิ์แลกแต้ม");
+              return;
+            }
+            if (choice === "discount-50" && member.points >= 100) {
+              member.points -= 100;
+              alert("ใช้ 100 แต้มสำเร็จ: ส่วนลด 50 บาท (mock)");
+            } else if (choice === "free-drink" && member.points >= 150) {
+              member.points -= 150;
+              alert("ใช้ 150 แต้มสำเร็จ: แลกเครื่องดื่มฟรี 1 แก้ว (mock)");
+            } else {
+              alert("แต้มไม่พอ");
+            }
+            renderAll();
+          });
+        }
       }
 
-      function renderProfilePage() {
-        const promotions = store.promotions;
-        const member = getCurrentMember();
-        const memberOrders = store.orders.filter((order) => order.memberId === member.id);
-        const historyRows = memberOrders
-          .map(
-            (order) => `
-              <tr>
-                <td>${order.createdAt.slice(0, 10)}</td>
-                <td>${order.id}</td>
-                <td>฿${order.total.toLocaleString()}</td>
-              </tr>
-            `
-          )
-          .join("");
-
-        const promoCards = promotions
-          .map(
-            (promo) => `
-              <article class="card">
-                <span class="badge">${promo.type.toUpperCase()}</span>
-                <h4>${promo.title}</h4>
-                <p>ส่วนลด ${promo.value}${promo.type === "percent" ? "%" : " บาท"}</p>
-                <small class="muted">สถานะ: ${promo.active ? "เปิดใช้งาน" : "ปิดใช้งาน"}</small>
-              </article>
-            `
-          )
-          .join("");
-
-        document.querySelector("#profile").innerHTML = `
+      function renderKitchenOrders() {
+        const orders = state.kitchenFilter === "all" ? app.orders : app.orders.filter((order) => order.status === state.kitchenFilter);
+        byId("kitchen-orders").innerHTML = `
           <div class="card">
-            <h2>โปรไฟล์สมาชิก</h2>
-            <p><strong>${member.name}</strong> (${member.phone}) • สถานะ: ${member.status}</p>
-            <div class="kpis">
-              <div class="kpi"><small>แต้มสะสม</small><strong>${member.points} pts</strong></div>
-              <div class="kpi"><small>จำนวนบิลทั้งหมด</small><strong>${memberOrders.length} บิล</strong></div>
-              <div class="kpi"><small>ต้องเปลี่ยนรหัสผ่าน</small><strong>${member.mustChangePassword ? "Yes" : "No"}</strong></div>
+            <h2>หน้าร้านสำหรับรับออเดอร์</h2>
+            <p class="muted">ออเดอร์ใหม่จะขึ้นทันทีจากหน้าลูกค้า (mock realtime queue).</p>
+            ${state.lastNewOrderId ? `<div class="note">ออเดอร์ใหม่ล่าสุด: <strong>${state.lastNewOrderId}</strong></div>` : ""}
+            <div class="status-row" style="margin-top:0.7rem">
+              <button type="button" class="js-kfilter ${state.kitchenFilter === "all" ? "active-pill" : "button-ghost"}" data-filter="all">ทั้งหมด</button>
+              <button type="button" class="js-kfilter ${state.kitchenFilter === "new" ? "active-pill" : "button-ghost"}" data-filter="new">ใหม่</button>
+              <button type="button" class="js-kfilter ${state.kitchenFilter === "cooking" ? "active-pill" : "button-ghost"}" data-filter="cooking">กำลังทำ</button>
+              <button type="button" class="js-kfilter ${state.kitchenFilter === "ready" ? "active-pill" : "button-ghost"}" data-filter="ready">เสร็จแล้ว</button>
+              <button type="button" class="js-kfilter ${state.kitchenFilter === "paid" ? "active-pill" : "button-ghost"}" data-filter="paid">จ่ายแล้ว</button>
             </div>
           </div>
 
-          <div class="two-col">
-            <div class="card">
-              <h3>ประวัติการซื้อ</h3>
-              <table>
-                <thead>
-                  <tr><th>วันที่</th><th>เลขออเดอร์</th><th>ยอดซื้อ</th></tr>
-                </thead>
-                <tbody>${historyRows}</tbody>
-              </table>
-            </div>
+          ${orders.map((order) => `
+            <article class="card">
+              <div style="display:flex;justify-content:space-between;gap:0.7rem;flex-wrap:wrap">
+                <div>
+                  <h3 style="margin:0">${order.id}</h3>
+                  <small class="muted">${order.createdAt.slice(0, 16).replace("T", " ")} • ${order.customerType}${order.memberId ? ` (${memberById(order.memberId).name})` : ""}</small>
+                </div>
+                <div class="${statusClass(order.status)}">${orderStatusLabel(order.status)}</div>
+              </div>
+              <ul>
+                ${order.items.map((item) => `<li>${menuById(item.menuId).name} x ${item.qty}</li>`).join("")}
+              </ul>
+              <strong>ยอดสุทธิ: ฿${order.total.toLocaleString()}</strong>
+              <div class="status-row" style="margin-top:0.6rem">
+                <button type="button" class="button-warning button-small js-status" data-id="${order.id}" data-status="cooking">กำลังทำ</button>
+                <button type="button" class="button-small js-status" data-id="${order.id}" data-status="ready">เสร็จแล้ว</button>
+                <button type="button" class="button-ghost button-small js-status" data-id="${order.id}" data-status="paid">จ่ายแล้ว</button>
+              </div>
+            </article>`).join("")}
+        `;
 
-            <div class="card">
-              <h3>โปรโมชั่นสำหรับสมาชิก</h3>
-              <div class="grid">${promoCards}</div>
+        document.querySelectorAll(".js-kfilter").forEach((button) => button.addEventListener("click", () => {
+          state.kitchenFilter = button.dataset.filter;
+          renderKitchenOrders();
+        }));
+        document.querySelectorAll(".js-status").forEach((button) => button.addEventListener("click", () => setOrderStatus(button.dataset.id, button.dataset.status)));
+      }
+
+      function summary() {
+        const paid = app.orders.filter((o) => o.status === "paid");
+        const total = paid.reduce((sum, o) => sum + o.total, 0);
+        let food = 0;
+        let drink = 0;
+        paid.forEach((order) => {
+          order.items.forEach((item) => {
+            const menu = menuById(item.menuId);
+            if (!menu) return;
+            if (menu.category === "food") {
+              food += menu.price * item.qty;
+            } else {
+              drink += menu.price * item.qty;
+            }
+          });
+        });
+        return { total, food, drink };
+      }
+
+      function renderAdminDashboard() {
+        const sum = summary();
+        byId("admin-dashboard").innerHTML = `
+          <div class="card">
+            <h2>หน้าหลังร้าน / admin dashboard</h2>
+            <p class="muted">ภาพรวมร้าน + โครงสร้างที่พร้อมต่อ backend ภายหลัง</p>
+            <div class="kpis">
+              <div class="kpi"><small>ออเดอร์ทั้งหมด</small><strong>${app.orders.length}</strong></div>
+              <div class="kpi"><small>ออเดอร์ใหม่</small><strong>${app.orders.filter((o) => o.status === "new").length}</strong></div>
+              <div class="kpi"><small>ยอดขายรวม (paid)</small><strong>฿${sum.total.toLocaleString()}</strong></div>
+              <div class="kpi"><small>ยอด food</small><strong>฿${sum.food.toLocaleString()}</strong></div>
+              <div class="kpi"><small>ยอด drink</small><strong>฿${sum.drink.toLocaleString()}</strong></div>
+              <div class="kpi"><small>สมาชิกทั้งหมด</small><strong>${app.members.length}</strong></div>
             </div>
           </div>
         `;
       }
 
-      function renderBackofficePage() {
-        const summary = getDashboardSummary();
-
-        document.querySelector("#backoffice").innerHTML = `
-          <div class="card">
-            <h2>หน้าหลังร้าน (Back Office)</h2>
-            <p class="muted">ศูนย์รวมจัดการเมนู สมาชิก โปรโมชั่น และภาพรวมยอดขาย.</p>
-            <div class="kpis">
-              <div class="kpi"><small>ยอดขายรวม</small><strong>฿${summary.totalSales.toLocaleString()}</strong></div>
-              <div class="kpi"><small>ยอดขาย food</small><strong>฿${summary.foodSales.toLocaleString()}</strong></div>
-              <div class="kpi"><small>ยอดขาย drink</small><strong>฿${summary.drinkSales.toLocaleString()}</strong></div>
-              <div class="kpi"><small>จำนวนสมาชิก</small><strong>${summary.membersCount}</strong></div>
-              <div class="kpi"><small>จำนวนเมนู</small><strong>${summary.menusCount}</strong></div>
-              <div class="kpi"><small>จำนวนโปรโมชั่น</small><strong>${summary.promotionsCount}</strong></div>
-            </div>
-          </div>
-        `;
-      }
-
-      function renderMenuAdminPage() {
-        const menu = store.menus;
-        const foodCards = menu
-          .filter((item) => item.category === "food")
-          .map(
-            (item) => `
-              <article class="card menu-card">
-                <img src="${item.image}" alt="${item.name}" />
-                <span class="badge">${item.id} • ${item.active ? "active" : "inactive"}</span>
-                <h4>${item.name}</h4>
-                <div class="price">฿${item.price.toLocaleString()}</div>
-                <div class="table-actions" style="margin-top:0.7rem">
-                  <button class="button-ghost button-small" type="button">แก้ไข</button>
-                  <button class="button-danger button-small" type="button">ลบ</button>
-                </div>
-              </article>
-            `
-          )
-          .join("");
-
-        const drinkCards = menu
-          .filter((item) => item.category === "drink")
-          .map(
-            (item) => `
-              <article class="card menu-card">
-                <img src="${item.image}" alt="${item.name}" />
-                <span class="badge">${item.id} • ${item.active ? "active" : "inactive"}</span>
-                <h4>${item.name}</h4>
-                <div class="price">฿${item.price.toLocaleString()}</div>
-                <div class="table-actions" style="margin-top:0.7rem">
-                  <button class="button-ghost button-small" type="button">แก้ไข</button>
-                  <button class="button-danger button-small" type="button">ลบ</button>
-                </div>
-              </article>
-            `
-          )
-          .join("");
-
-        document.querySelector("#menu-admin").innerHTML = `
+      function renderMenuManagement() {
+        byId("menu-management").innerHTML = `
           <div class="card">
             <h2>หน้าจัดการเมนู</h2>
-            <p class="muted">แยกรายการเมนูตามหมวด food และ drink เพื่อทดสอบ flow หลังร้าน.</p>
+            <form id="menu-form" class="inline-form">
+              <input name="name" placeholder="ชื่อเมนู" required />
+              <select name="category"><option value="food">food</option><option value="drink">drink</option></select>
+              <input name="price" type="number" min="1" placeholder="ราคา" required />
+              <input name="image" placeholder="URL รูปภาพ" required />
+              <button type="submit">เพิ่มเมนู</button>
+            </form>
           </div>
-
           <div class="card">
-            <h3>🍛 Food</h3>
-            <div class="grid menu-admin">${foodCards}</div>
-          </div>
-
-          <div class="card">
-            <h3>🥤 Drink</h3>
-            <div class="grid menu-admin">${drinkCards}</div>
+            <table>
+              <thead><tr><th>ID</th><th>ชื่อ</th><th>หมวด</th><th>ราคา</th><th>รูป</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+              <tbody>
+                ${app.menus.map((m) => `<tr><td>${m.id}</td><td>${m.name}</td><td>${m.category}</td><td>฿${m.price}</td><td><a href="${m.image}" target="_blank" rel="noreferrer">รูป</a></td><td>${m.active ? "active" : "inactive"}</td><td><button class="button-ghost button-small js-toggle-menu" data-id="${m.id}">${m.active ? "ปิดขาย" : "เปิดขาย"}</button> <button class="button-danger button-small js-del-menu" data-id="${m.id}">ลบ</button></td></tr>`).join("")}
+              </tbody>
+            </table>
           </div>
         `;
+
+        byId("menu-form").addEventListener("submit", (event) => {
+          event.preventDefault();
+          const fd = new FormData(event.target);
+          const newMenu = {
+            id: `${fd.get("category").toString().toUpperCase().slice(0, 1)}${String(100 + app.menus.length).padStart(3, "0")}`,
+            name: fd.get("name").toString().trim(),
+            category: fd.get("category").toString(),
+            price: Number(fd.get("price")),
+            image: fd.get("image").toString().trim(),
+            active: true
+          };
+          app.menus.push(newMenu);
+          renderAll();
+        });
+
+        document.querySelectorAll(".js-toggle-menu").forEach((button) => button.addEventListener("click", () => {
+          const menu = menuById(button.dataset.id);
+          menu.active = !menu.active;
+          renderAll();
+        }));
+        document.querySelectorAll(".js-del-menu").forEach((button) => button.addEventListener("click", () => {
+          app.menus = app.menus.filter((m) => m.id !== button.dataset.id);
+          renderAll();
+        }));
       }
 
-      function resetMemberPassword(memberId) {
-        const member = store.members.find((item) => item.id === memberId);
-        if (!member) {
-          return;
-        }
-        member.mustChangePassword = true;
-        alert(`ตั้งค่าให้ ${member.name} ต้องเปลี่ยนรหัสผ่านแล้ว`);
-        renderAll();
-      }
-
-      function renderMemberAdminPage() {
-        const members = store.members;
-        const rows = members
-          .map(
-            (member) => `
-              <tr>
-                <td>${member.id}</td>
-                <td>${member.name}</td>
-                <td>${member.phone}</td>
-                <td>${member.points}</td>
-                <td>${member.status}</td>
-                <td>${member.mustChangePassword ? "Yes" : "No"}</td>
-                <td><button type="button" data-id="${member.id}" class="button-danger button-small js-reset-pass">Reset Password</button></td>
-              </tr>
-            `
-          )
-          .join("");
-
-        document.querySelector("#member-admin").innerHTML = `
+      function renderMemberManagement() {
+        byId("member-management").innerHTML = `
           <div class="card">
             <h2>หน้าจัดการสมาชิก</h2>
-            <p class="muted">รายการสมาชิกตัวอย่าง พร้อมปุ่ม reset password (mock).</p>
+            <p class="muted">รีเซ็ตรหัส, ดูแต้ม, ดูประวัติซื้อ (จาก mock orders)</p>
           </div>
-
           <div class="card">
-            <h3>รายการสมาชิก</h3>
             <table>
-              <thead><tr><th>ID</th><th>ชื่อ</th><th>เบอร์โทร</th><th>แต้ม</th><th>สถานะ</th><th>mustChangePassword</th><th>จัดการ</th></tr></thead>
-              <tbody>${rows}</tbody>
+              <thead><tr><th>ID</th><th>ชื่อ</th><th>โทร</th><th>แต้ม</th><th>สถานะ</th><th>ประวัติซื้อ</th><th>จัดการ</th></tr></thead>
+              <tbody>
+                ${app.members.map((m) => {
+                  const orders = app.orders.filter((o) => o.memberId === m.id).length;
+                  return `<tr><td>${m.id}</td><td>${m.name}</td><td>${m.phone}</td><td>${m.points}</td><td>${m.status}</td><td>${orders} บิล</td><td><button class="button-warning button-small js-reset-pass" data-id="${m.id}">Reset Password</button></td></tr>`;
+                }).join("")}
+              </tbody>
             </table>
           </div>
         `;
-
-        document.querySelectorAll(".js-reset-pass").forEach((button) => {
-          button.addEventListener("click", () => resetMemberPassword(button.dataset.id));
-        });
+        document.querySelectorAll(".js-reset-pass").forEach((button) => button.addEventListener("click", () => {
+          const member = memberById(button.dataset.id);
+          member.mustChangePassword = true;
+          alert(`ตั้งค่า reset password ให้ ${member.name} แล้ว`);
+          renderAll();
+        }));
       }
 
-      function renderPromoAdminPage() {
-        const promotions = store.promotions;
-        const promoRows = promotions
-          .map(
-            (promo) => `
-              <tr>
-                <td>${promo.id}</td>
-                <td>${promo.title}</td>
-                <td>${promo.type}</td>
-                <td>${promo.value}</td>
-                <td>${promo.active ? "active" : "inactive"}</td>
-              </tr>
-            `
-          )
-          .join("");
-
-        document.querySelector("#promo-admin").innerHTML = `
+      function renderPromoManagement() {
+        byId("promo-management").innerHTML = `
           <div class="card">
             <h2>หน้าจัดการโปรโมชั่น</h2>
-            <p class="muted">รายการโปรโมชั่นทั้งหมดแบบ mock data (ยังไม่ผูกฐานข้อมูล).</p>
+            <form id="promo-form" class="inline-form">
+              <input name="title" placeholder="ชื่อโปร" required />
+              <select name="type"><option value="percent">percent</option><option value="fixed">fixed</option></select>
+              <input name="value" type="number" min="1" placeholder="มูลค่า" required />
+              <button type="submit">เพิ่มโปร</button>
+            </form>
           </div>
-
           <div class="card">
-            <h3>โปรโมชั่นปัจจุบัน</h3>
             <table>
-              <thead><tr><th>ID</th><th>ชื่อโปร</th><th>ประเภท</th><th>มูลค่า</th><th>สถานะ</th></tr></thead>
-              <tbody>${promoRows}</tbody>
+              <thead><tr><th>ID</th><th>ชื่อโปร</th><th>ประเภท</th><th>ค่า</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+              <tbody>
+                ${app.promos.map((p) => `<tr><td>${p.id}</td><td>${p.title}</td><td>${p.type}</td><td>${p.value}</td><td>${p.active ? "active" : "inactive"}</td><td><button class="button-ghost button-small js-active-promo" data-id="${p.id}">ตั้งเป็น active</button> <button class="button-danger button-small js-del-promo" data-id="${p.id}">ลบ</button></td></tr>`).join("")}
+              </tbody>
             </table>
           </div>
         `;
+
+        byId("promo-form").addEventListener("submit", (event) => {
+          event.preventDefault();
+          const fd = new FormData(event.target);
+          app.promos.push({ id: `P${String(100 + app.promos.length).padStart(3, "0")}`, title: fd.get("title").toString().trim(), type: fd.get("type").toString(), value: Number(fd.get("value")), active: false });
+          renderAll();
+        });
+        document.querySelectorAll(".js-active-promo").forEach((button) => button.addEventListener("click", () => {
+          app.promos.forEach((p) => {
+            p.active = p.id === button.dataset.id;
+          });
+          renderAll();
+        }));
+        document.querySelectorAll(".js-del-promo").forEach((button) => button.addEventListener("click", () => {
+          app.promos = app.promos.filter((p) => p.id !== button.dataset.id);
+          renderAll();
+        }));
+      }
+
+      function renderSalesReport() {
+        const paidOrders = app.orders.filter((o) => o.status === "paid");
+        const filtered = state.salesFilter === "all" ? paidOrders : paidOrders.filter((order) => order.items.some((i) => menuById(i.menuId)?.category === state.salesFilter));
+        const total = filtered.reduce((sum, o) => sum + o.total, 0);
+
+        byId("sales-report").innerHTML = `
+          <div class="card">
+            <h2>หน้าดูยอดขาย</h2>
+            <div class="status-row">
+              <button type="button" class="js-sales-filter ${state.salesFilter === "all" ? "active-pill" : "button-ghost"}" data-filter="all">รวมทั้งหมด</button>
+              <button type="button" class="js-sales-filter ${state.salesFilter === "food" ? "active-pill" : "button-ghost"}" data-filter="food">food</button>
+              <button type="button" class="js-sales-filter ${state.salesFilter === "drink" ? "active-pill" : "button-ghost"}" data-filter="drink">drink</button>
+            </div>
+            <p style="margin-top:0.7rem"><strong>ยอดขายในมุมมองนี้: ฿${total.toLocaleString()}</strong></p>
+          </div>
+          <div class="card">
+            <table>
+              <thead><tr><th>วันที่</th><th>ออเดอร์</th><th>ลูกค้า</th><th>สถานะ</th><th>ยอดสุทธิ</th></tr></thead>
+              <tbody>
+                ${filtered.map((o) => `<tr><td>${o.createdAt.slice(0, 10)}</td><td>${o.id}</td><td>${o.customerType}${o.memberId ? ` (${memberById(o.memberId).name})` : ""}</td><td>${orderStatusLabel(o.status)}</td><td>฿${o.total.toLocaleString()}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        document.querySelectorAll(".js-sales-filter").forEach((button) => button.addEventListener("click", () => {
+          state.salesFilter = button.dataset.filter;
+          renderSalesReport();
+        }));
       }
 
       function renderAll() {
-        renderStorePage();
-        renderLoginPage();
-        renderProfilePage();
-        renderBackofficePage();
-        renderMenuAdminPage();
-        renderMemberAdminPage();
-        renderPromoAdminPage();
+        renderCustomerOrder();
+        renderMemberLogin();
+        renderKitchenOrders();
+        renderAdminDashboard();
+        renderMenuManagement();
+        renderMemberManagement();
+        renderPromoManagement();
+        renderSalesReport();
       }
 
-      function renderRoute(routeId) {
-        const safeRoute = routes.some((route) => route.id === routeId) ? routeId : "store";
+      window.addEventListener("hashchange", () => {
+        setRoute(location.hash.replace("#", ""));
+      });
 
-        renderNav(safeRoute);
-        document.querySelectorAll(".screen").forEach((screen) => screen.classList.remove("active"));
-        document.querySelector(`#${safeRoute}`).classList.add("active");
-        renderAll();
-      }
-
-      window.addEventListener("hashchange", () => renderRoute(location.hash.replace("#", "")));
-      renderRoute(location.hash.replace("#", ""));
+      renderAll();
+      setRoute(location.hash.replace("#", ""));
     </script>
   </body>
 </html>
