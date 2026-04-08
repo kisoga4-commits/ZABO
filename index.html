@@ -1,1 +1,737 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZABO | Restaurant + Drink Prototype</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --card: #ffffff;
+        --line: #dde4ee;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f766e;
+        --primary-soft: #ccfbf1;
+        --accent: #7c3aed;
+        --danger: #dc2626;
+      }
 
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Inter", "Noto Sans Thai", sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+
+      header {
+        background: linear-gradient(125deg, #115e59, #7c3aed);
+        color: white;
+        padding: 1rem;
+        position: sticky;
+        top: 0;
+        z-index: 9;
+      }
+
+      .header-wrap {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .brand {
+        font-size: 1.2rem;
+        font-weight: 700;
+      }
+
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+
+      .nav-link {
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        padding: 0.45rem 0.7rem;
+        border-radius: 999px;
+        color: white;
+        text-decoration: none;
+        font-size: 0.85rem;
+      }
+
+      .nav-link.active {
+        background: white;
+        color: var(--primary);
+        border-color: white;
+      }
+
+      main {
+        max-width: 1200px;
+        margin: 1rem auto 2rem;
+        padding: 0 1rem;
+      }
+
+      .screen {
+        display: none;
+      }
+
+      .screen.active {
+        display: block;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 1rem;
+      }
+
+      .grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .grid.food-drink {
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      }
+
+      .menu-card img {
+        width: 100%;
+        height: 140px;
+        object-fit: cover;
+        border-radius: 12px;
+      }
+
+      .menu-card h4 {
+        margin: 0.75rem 0 0.2rem;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        background: var(--primary-soft);
+        color: var(--primary);
+        margin-bottom: 0.4rem;
+      }
+
+      .price {
+        font-weight: 700;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      input,
+      select,
+      textarea,
+      button {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0.65rem 0.7rem;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 92px;
+      }
+
+      button {
+        cursor: pointer;
+        border: none;
+        background: var(--primary);
+        color: white;
+        font-weight: 600;
+      }
+
+      .button-ghost {
+        background: white;
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+
+      .button-danger {
+        background: var(--danger);
+      }
+
+      .input-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.75rem;
+      }
+
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 0.75rem;
+      }
+
+      .kpi {
+        background: #f8fafc;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0.8rem;
+      }
+
+      .kpi small {
+        color: var(--muted);
+      }
+
+      .kpi strong {
+        display: block;
+        margin-top: 0.35rem;
+        font-size: 1.2rem;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        padding: 0.6rem 0.2rem;
+        font-size: 0.92rem;
+      }
+
+      .table-actions {
+        display: flex;
+        gap: 0.35rem;
+      }
+
+      .table-actions button {
+        width: auto;
+        padding: 0.4rem 0.6rem;
+        font-size: 0.8rem;
+      }
+
+      .note {
+        border-left: 4px solid var(--accent);
+        background: #f5f3ff;
+        padding: 0.7rem 0.8rem;
+        border-radius: 8px;
+        color: #4c1d95;
+        font-size: 0.9rem;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      @media (max-width: 920px) {
+        .two-col {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header-wrap">
+        <div>
+          <div class="brand">🍽️ ZABO Prototype (Food + Drink)</div>
+          <small>UI Flow เตรียมต่อ Firebase RTDB + Python Backend</small>
+        </div>
+        <nav id="nav"></nav>
+      </div>
+    </header>
+
+    <main>
+      <section id="store" class="screen"></section>
+      <section id="login" class="screen"></section>
+      <section id="profile" class="screen"></section>
+      <section id="backoffice" class="screen"></section>
+      <section id="menu-admin" class="screen"></section>
+      <section id="member-admin" class="screen"></section>
+      <section id="promo-admin" class="screen"></section>
+    </main>
+
+    <script>
+      const mockDB = {
+        menu: [
+          {
+            id: "F001",
+            category: "food",
+            name: "ข้าวกะเพราหมูกรอบ",
+            price: 89,
+            image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=1200&q=80"
+          },
+          {
+            id: "F002",
+            category: "food",
+            name: "ผัดไทยกุ้งสด",
+            price: 95,
+            image: "https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=1200&q=80"
+          },
+          {
+            id: "D001",
+            category: "drink",
+            name: "ชาไทยเย็น",
+            price: 55,
+            image: "https://images.unsplash.com/photo-1542444459-db63c1f9f0f6?auto=format&fit=crop&w=1200&q=80"
+          },
+          {
+            id: "D002",
+            category: "drink",
+            name: "เลมอนโซดา",
+            price: 65,
+            image: "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=1200&q=80"
+          }
+        ],
+        members: [
+          {
+            id: "M001",
+            fullName: "พลอย สายชิม",
+            phone: "0899991111",
+            password: "1234",
+            points: 230,
+            tier: "Gold",
+            purchaseHistory: [
+              { date: "2026-04-05", orderId: "SO-412", total: 250 },
+              { date: "2026-04-07", orderId: "SO-425", total: 190 }
+            ]
+          },
+          {
+            id: "M002",
+            fullName: "นนท์ กินเพลิน",
+            phone: "0812223333",
+            password: "9999",
+            points: 120,
+            tier: "Silver",
+            purchaseHistory: [{ date: "2026-04-06", orderId: "SO-420", total: 155 }]
+          }
+        ],
+        promotions: [
+          {
+            id: "P001",
+            title: "ซื้อเครื่องดื่ม 2 แก้ว ลด 15%",
+            type: "drink",
+            activeUntil: "2026-04-30",
+            detail: "เฉพาะเมนู drink ในช่วง 14:00-17:00"
+          },
+          {
+            id: "P002",
+            title: "สมาชิกใหม่รับแต้ม x2",
+            type: "member",
+            activeUntil: "2026-05-15",
+            detail: "เมื่อสั่ง food ครบ 150 บาทขึ้นไป"
+          }
+        ],
+        sales: {
+          todayOrders: 52,
+          todayRevenue: 8740,
+          avgBill: 168,
+          topMenu: "ข้าวกะเพราหมูกรอบ"
+        }
+      };
+
+      const dataService = {
+        // NOTE: โครงสร้างนี้เตรียมต่อ Firebase RTDB/Python API ในรอบถัดไป
+        getMenu: async () => structuredClone(mockDB.menu),
+        getMembers: async () => structuredClone(mockDB.members),
+        getPromotions: async () => structuredClone(mockDB.promotions),
+        getSales: async () => structuredClone(mockDB.sales),
+        loginByPhone: async (phone, password) => {
+          const member = mockDB.members.find((m) => m.phone === phone && m.password === password);
+          return member ? structuredClone(member) : null;
+        }
+      };
+
+      const routes = [
+        { id: "store", label: "หน้าร้าน" },
+        { id: "login", label: "ล็อกอินสมาชิก" },
+        { id: "profile", label: "โปรไฟล์สมาชิก" },
+        { id: "backoffice", label: "หน้าหลังร้าน" },
+        { id: "menu-admin", label: "จัดการเมนู" },
+        { id: "member-admin", label: "จัดการสมาชิก" },
+        { id: "promo-admin", label: "จัดการโปรโมชั่น" }
+      ];
+
+      const state = {
+        currentMember: mockDB.members[0]
+      };
+
+      function renderNav(activeRoute) {
+        const nav = document.querySelector("#nav");
+        nav.innerHTML = routes
+          .map(
+            (route) =>
+              `<a class="nav-link ${activeRoute === route.id ? "active" : ""}" href="#${route.id}">${route.label}</a>`
+          )
+          .join("");
+      }
+
+      async function renderStorePage() {
+        const menu = await dataService.getMenu();
+        const food = menu.filter((item) => item.category === "food");
+        const drink = menu.filter((item) => item.category === "drink");
+
+        const createMenuCards = (items) =>
+          items
+            .map(
+              (item) => `
+                <article class="card menu-card">
+                  <img src="${item.image}" alt="${item.name}" />
+                  <span class="badge">${item.category.toUpperCase()}</span>
+                  <h4>${item.name}</h4>
+                  <div class="price">฿${item.price.toLocaleString()}</div>
+                </article>
+              `
+            )
+            .join("");
+
+        document.querySelector("#store").innerHTML = `
+          <div class="card">
+            <h2>หน้าร้าน (Storefront)</h2>
+            <p class="muted">โชว์เมนูอาหารและน้ำดื่มในระบบเดียว พร้อมแยกหมวดชัดเจนเพื่อทดสอบ flow ลูกค้า.</p>
+          </div>
+
+          <div class="card">
+            <h3>🍛 Food</h3>
+            <div class="grid food-drink">${createMenuCards(food)}</div>
+          </div>
+
+          <div class="card">
+            <h3>🥤 Drink</h3>
+            <div class="grid food-drink">${createMenuCards(drink)}</div>
+          </div>
+        `;
+      }
+
+      function renderLoginPage() {
+        document.querySelector("#login").innerHTML = `
+          <div class="two-col">
+            <form id="login-form" class="card">
+              <h2>ล็อกอินสมาชิก</h2>
+              <p class="muted">ใช้เบอร์โทร + รหัสผ่าน (mock login) เพื่อเข้าสู่สมาชิก.</p>
+              <div class="input-grid">
+                <div>
+                  <label for="phone">เบอร์โทรศัพท์</label>
+                  <input id="phone" name="phone" placeholder="0812345678" required />
+                </div>
+                <div>
+                  <label for="password">รหัสผ่าน</label>
+                  <input id="password" name="password" type="password" placeholder="••••" required />
+                </div>
+              </div>
+              <div style="margin-top: 0.8rem">
+                <button type="submit">เข้าสู่ระบบ</button>
+              </div>
+              <small class="muted">Demo account: 0899991111 / 1234</small>
+            </form>
+
+            <div class="card">
+              <h3>Flow ที่จะต่อ backend รอบถัดไป</h3>
+              <ol>
+                <li>validate เบอร์โทร + รหัสผ่านจาก Python API</li>
+                <li>ดึงข้อมูลสมาชิกจาก Firebase RTDB</li>
+                <li>สร้าง session/token และโหลดหน้าโปรไฟล์สมาชิก</li>
+              </ol>
+              <p class="note">ตอนนี้ยังเป็น prototype: ไม่มีการบันทึกข้อมูลลงฐานจริง.</p>
+            </div>
+          </div>
+        `;
+
+        document.querySelector("#login-form").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const formData = new FormData(event.target);
+          const phone = formData.get("phone").toString().trim();
+          const password = formData.get("password").toString().trim();
+          const member = await dataService.loginByPhone(phone, password);
+
+          if (!member) {
+            alert("ไม่พบข้อมูลสมาชิก กรุณาตรวจสอบเบอร์โทร/รหัสผ่าน");
+            return;
+          }
+
+          state.currentMember = member;
+          location.hash = "#profile";
+        });
+      }
+
+      async function renderProfilePage() {
+        const promotions = await dataService.getPromotions();
+        const member = state.currentMember;
+        const historyRows = member.purchaseHistory
+          .map(
+            (purchase) => `
+              <tr>
+                <td>${purchase.date}</td>
+                <td>${purchase.orderId}</td>
+                <td>฿${purchase.total.toLocaleString()}</td>
+              </tr>
+            `
+          )
+          .join("");
+
+        const promoCards = promotions
+          .map(
+            (promo) => `
+              <article class="card">
+                <span class="badge">${promo.type}</span>
+                <h4>${promo.title}</h4>
+                <p>${promo.detail}</p>
+                <small class="muted">ถึงวันที่ ${promo.activeUntil}</small>
+              </article>
+            `
+          )
+          .join("");
+
+        document.querySelector("#profile").innerHTML = `
+          <div class="card">
+            <h2>โปรไฟล์สมาชิก</h2>
+            <p><strong>${member.fullName}</strong> (${member.phone}) • Tier ${member.tier}</p>
+            <div class="kpis">
+              <div class="kpi"><small>แต้มสะสม</small><strong>${member.points} pts</strong></div>
+              <div class="kpi"><small>จำนวนบิลทั้งหมด</small><strong>${member.purchaseHistory.length} บิล</strong></div>
+              <div class="kpi"><small>สถานะระบบ</small><strong>Mock Data</strong></div>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="card">
+              <h3>ประวัติการซื้อ</h3>
+              <table>
+                <thead>
+                  <tr><th>วันที่</th><th>เลขออเดอร์</th><th>ยอดซื้อ</th></tr>
+                </thead>
+                <tbody>${historyRows}</tbody>
+              </table>
+            </div>
+
+            <div class="card">
+              <h3>โปรโมชั่นสำหรับสมาชิก</h3>
+              <div class="grid">${promoCards}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      async function renderBackofficePage() {
+        const sales = await dataService.getSales();
+        document.querySelector("#backoffice").innerHTML = `
+          <div class="card">
+            <h2>หน้าหลังร้าน (Back Office)</h2>
+            <p class="muted">ศูนย์รวมจัดการเมนู สมาชิก โปรโมชั่น และภาพรวมยอดขาย.</p>
+            <div class="kpis">
+              <div class="kpi"><small>ออเดอร์วันนี้</small><strong>${sales.todayOrders}</strong></div>
+              <div class="kpi"><small>ยอดขายวันนี้</small><strong>฿${sales.todayRevenue.toLocaleString()}</strong></div>
+              <div class="kpi"><small>ยอดต่อบิลเฉลี่ย</small><strong>฿${sales.avgBill.toLocaleString()}</strong></div>
+              <div class="kpi"><small>เมนูขายดี</small><strong>${sales.topMenu}</strong></div>
+            </div>
+            <div class="note" style="margin-top:0.8rem">
+              ลิงก์ flow: ไปที่หน้าจัดการเมนู / สมาชิก / โปรโมชั่น ผ่านเมนูบนสุด เพื่อจำลองการทำงาน staff.
+            </div>
+          </div>
+        `;
+      }
+
+      async function renderMenuAdminPage() {
+        const menu = await dataService.getMenu();
+        const rows = menu
+          .map(
+            (item) => `
+              <tr>
+                <td>${item.id}</td>
+                <td>${item.name}</td>
+                <td>${item.category}</td>
+                <td>฿${item.price}</td>
+                <td class="table-actions">
+                  <button class="button-ghost" type="button">แก้ไข</button>
+                  <button class="button-danger" type="button">ลบ</button>
+                </td>
+              </tr>
+            `
+          )
+          .join("");
+
+        document.querySelector("#menu-admin").innerHTML = `
+          <div class="card">
+            <h2>หน้าจัดการเมนู</h2>
+            <p class="muted">เพิ่ม/แก้ไข/ลบเมนู โดยรองรับหมวด <strong>food</strong> และ <strong>drink</strong> ในระบบเดียว.</p>
+          </div>
+
+          <div class="two-col">
+            <form class="card">
+              <h3>เพิ่มเมนูใหม่ (prototype)</h3>
+              <div class="input-grid">
+                <div>
+                  <label>ชื่อเมนู</label>
+                  <input placeholder="เช่น อเมริกาโน่เย็น" />
+                </div>
+                <div>
+                  <label>หมวดหมู่</label>
+                  <select>
+                    <option>food</option>
+                    <option>drink</option>
+                  </select>
+                </div>
+                <div>
+                  <label>ราคา</label>
+                  <input type="number" placeholder="65" />
+                </div>
+                <div>
+                  <label>URL รูปภาพ</label>
+                  <input placeholder="https://..." />
+                </div>
+              </div>
+              <div style="margin-top:0.8rem"><button type="button">บันทึก (mock)</button></div>
+            </form>
+
+            <div class="card">
+              <h3>แนวทางเชื่อมระบบรอบถัดไป</h3>
+              <ul>
+                <li>POST/PUT/DELETE ไป Python backend API</li>
+                <li>sync รายการเมนูลง Firebase RTDB</li>
+                <li>upload รูปไป storage และเก็บ URL</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>รายการเมนูทั้งหมด</h3>
+            <table>
+              <thead><tr><th>ID</th><th>ชื่อ</th><th>หมวด</th><th>ราคา</th><th>จัดการ</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      async function renderMemberAdminPage() {
+        const members = await dataService.getMembers();
+        const rows = members
+          .map(
+            (member) => `
+              <tr>
+                <td>${member.id}</td>
+                <td>${member.fullName}</td>
+                <td>${member.phone}</td>
+                <td>${member.points}</td>
+                <td>${member.tier}</td>
+              </tr>
+            `
+          )
+          .join("");
+
+        document.querySelector("#member-admin").innerHTML = `
+          <div class="card">
+            <h2>หน้าจัดการสมาชิก</h2>
+            <p class="muted">จัดการข้อมูลสมาชิก แต้มสะสม และสถานะสมาชิก.</p>
+            <div class="input-grid">
+              <button type="button">เพิ่มสมาชิกใหม่ (mock)</button>
+              <button type="button" class="button-ghost">ปรับแต้มสมาชิก (mock)</button>
+              <button type="button" class="button-ghost">ดูประวัติซื้อทั้งหมด (mock)</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>รายการสมาชิก</h3>
+            <table>
+              <thead><tr><th>ID</th><th>ชื่อ</th><th>เบอร์โทร</th><th>แต้ม</th><th>Tier</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      async function renderPromoAdminPage() {
+        const promotions = await dataService.getPromotions();
+        const promoRows = promotions
+          .map(
+            (promo) => `
+              <tr>
+                <td>${promo.id}</td>
+                <td>${promo.title}</td>
+                <td>${promo.type}</td>
+                <td>${promo.activeUntil}</td>
+              </tr>
+            `
+          )
+          .join("");
+
+        document.querySelector("#promo-admin").innerHTML = `
+          <div class="card">
+            <h2>หน้าจัดการโปรโมชั่น</h2>
+            <p class="muted">สร้างและจัดการแคมเปญ promotion ให้ลูกค้าทั่วไป/สมาชิก.</p>
+            <form class="input-grid">
+              <div>
+                <label>ชื่อโปรโมชั่น</label>
+                <input placeholder="ลด 10% เมนู drink" />
+              </div>
+              <div>
+                <label>ประเภท</label>
+                <select>
+                  <option>drink</option>
+                  <option>food</option>
+                  <option>member</option>
+                </select>
+              </div>
+              <div>
+                <label>วันหมดอายุ</label>
+                <input type="date" />
+              </div>
+              <div>
+                <label>รายละเอียด</label>
+                <textarea placeholder="เงื่อนไขโปรโมชั่น..."></textarea>
+              </div>
+            </form>
+            <div style="margin-top: 0.8rem"><button type="button">บันทึกโปรโมชั่น (mock)</button></div>
+          </div>
+
+          <div class="card">
+            <h3>โปรโมชั่นปัจจุบัน</h3>
+            <table>
+              <thead><tr><th>ID</th><th>ชื่อโปร</th><th>ประเภท</th><th>หมดอายุ</th></tr></thead>
+              <tbody>${promoRows}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      async function renderRoute(routeId) {
+        const safeRoute = routes.some((route) => route.id === routeId) ? routeId : "store";
+
+        renderNav(safeRoute);
+        document.querySelectorAll(".screen").forEach((screen) => screen.classList.remove("active"));
+        document.querySelector(`#${safeRoute}`).classList.add("active");
+
+        await Promise.all([
+          renderStorePage(),
+          Promise.resolve(renderLoginPage()),
+          renderProfilePage(),
+          renderBackofficePage(),
+          renderMenuAdminPage(),
+          renderMemberAdminPage(),
+          renderPromoAdminPage()
+        ]);
+      }
+
+      window.addEventListener("hashchange", () => renderRoute(location.hash.replace("#", "")));
+      renderRoute(location.hash.replace("#", ""));
+    </script>
+  </body>
+</html>
