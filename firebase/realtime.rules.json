@@ -1,0 +1,71 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "syncPins": {
+      "$pin": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren(['pin','shopId','syncVersion'])"
+      }
+    },
+
+    "joinRequests": {
+      "$pin": {
+        "$requestId": {
+          ".read": true,
+          ".write": true,
+          ".validate": "newData.hasChildren(['clientId','pin']) && newData.child('pin').val() === $pin"
+        }
+      }
+    },
+
+    "clientApprovals": {
+      "$pin": {
+        "$clientId": {
+          "$requestId": {
+            ".read": true,
+            ".write": true,
+            ".validate": "newData.hasChildren(['approved'])"
+          }
+        }
+      }
+    },
+
+    "shops": {
+      "$shopId": {
+        "meta": {
+          ".read": true,
+          ".write": true
+        },
+        "messages": {
+          "$msgId": {
+            ".read": true,
+            ".write": true,
+            ".validate": "newData.hasChildren(['type','sentAt'])"
+          }
+        },
+        "operations": {
+          "$opId": {
+            ".read": true,
+            ".write": true,
+            ".validate": "newData.hasChildren(['type'])"
+          }
+        },
+        "snapshots": {
+          "$version": {
+            ".read": true,
+            ".write": true
+          }
+        },
+        "menuImages": {
+          "$imageKey": {
+            ".read": true,
+            ".write": true
+          }
+        }
+      }
+    }
+  }
+}

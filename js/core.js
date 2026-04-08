@@ -10,6 +10,7 @@
   const LS_PENDING_SYNC_VERSION = 'FAKDU_PENDING_SYNC_VERSION';
   const LS_CLIENT_OP_QUEUE = 'FAKDU_CLIENT_OP_QUEUE';
   const LS_FORCE_CLIENT_MODE = 'FAKDU_FORCE_CLIENT_MODE';
+  const LS_STAFF_MODE = 'FAKDU_STAFF_MODE';
   const LS_PENDING_PAIR_REQUEST_ID = 'FAKDU_PENDING_PAIR_REQUEST_ID';
   const LS_MENU_IMAGE_CACHE_PREFIX = 'FAKDU_MENU_IMAGE_CACHE_';
   const LS_PROMPTPAY_DYNAMIC = 'promptpay_dynamic';
@@ -92,6 +93,7 @@
   const state = {
     db: structuredClone(DEFAULT_DB),
     isAdminLoggedIn: localStorage.getItem(LS_ADMIN) === 'true',
+    isStaffMode: false,
     activeTab: 'customer',
     activeManageSub: 'dash',
     activeDashSub: 'history',
@@ -341,6 +343,7 @@
   }
   function getActorLabel() {
     if (IS_CLIENT_NODE) return 'client';
+    if (state.isStaffMode) return 'staff';
     return state.isAdminLoggedIn ? 'admin' : 'staff';
   }
   function getCurrentProfileName() {
@@ -505,6 +508,34 @@
     el.classList.add('hidden');
     el.classList.remove('flex');
     el.style.display = 'none';
+  }
+  function resolveStaffModeFlag() {
+    if (IS_CLIENT_NODE) return false;
+    const params = new URLSearchParams(window.location.search || '');
+    const mode = String(params.get('mode') || '').trim().toLowerCase();
+    const role = String(params.get('role') || '').trim().toLowerCase();
+    if (mode === 'staff' || mode === 'employee' || role === 'staff' || role === 'employee') {
+      localStorage.setItem(LS_STAFF_MODE, 'true');
+    }
+    return localStorage.getItem(LS_STAFF_MODE) === 'true';
+  }
+  function isRestrictedStaffMode() {
+    return !IS_CLIENT_NODE && state.isStaffMode;
+  }
+  function applyStaffModeUi() {
+    if (IS_CLIENT_NODE) return;
+    const nav = document.querySelector('.top-nav');
+    const manageTab = qs('tab-manage');
+    const systemTab = qs('tab-system');
+    const restricted = isRestrictedStaffMode();
+
+    nav?.classList.toggle('staff-only-nav', restricted);
+    if (manageTab) manageTab.classList.toggle('hidden', restricted);
+    if (systemTab) systemTab.classList.toggle('hidden', restricted);
+
+    if (restricted && (state.activeTab === 'manage' || state.activeTab === 'system')) {
+      switchTab('customer', qs('tab-customer'));
+    }
   }
   //* helpers close
 
@@ -920,6 +951,11 @@
 
   //* tab open
   function switchTab(id, element = null) {
+    if (isRestrictedStaffMode() && (id === 'manage' || id === 'system')) {
+      showToast('โหมดพนักงานเข้าได้เฉพาะ ลูกค้า และ เช็คบิล', 'error');
+      id = 'customer';
+      element = qs('tab-customer');
+    }
     state.activeTab = id;
     document.querySelectorAll('.screen').forEach((screen) => {
       screen.classList.add('hidden');
@@ -940,6 +976,10 @@
   }
 
   function attemptAdmin(target, element) {
+    if (isRestrictedStaffMode()) {
+      showToast('โหมดพนักงานไม่สามารถเข้าหลังร้าน/ระบบ', 'error');
+      return;
+    }
     if (state.isAdminLoggedIn) {
       switchTab(target, element);
       return;
@@ -2427,6 +2467,7 @@
       loadSettingsToForm();
       applyTheme();
       renderAll();
+      applyStaffModeUi();
       showToast('กู้คืนข้อมูลสำเร็จ', 'success');
     } catch (error) {
       console.error(error);
@@ -3827,38 +3868,89 @@
   async function openClientScanner() {
     console.log('[FAKDU][SYNC] openClientScanner');
     openModal('modal-client-scanner');
-    if (!window.Html5Qrcode) {
-      showToast('อุปกรณ์นี้ยังใช้สแกน QR ไม่ได้', 'error');
-      return;
-    }
     try {
       if (state.qrScanner) await closeClientScanner(true);
-      state.qrScanner = new Html5Qrcode('qr-reader-index');
-      const cameras = await Html5Qrcode.getCameras().catch(() => []);
-      const preferredCamera = cameras.find((cam) => /back|rear|environment/i.test(cam.label || ''))?.id || cameras[0]?.id || { facingMode: 'environment' };
-      await state.qrScanner.start(
-        preferredCamera,
-        { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
-        (decodedText) => {
-          console.log('[FAKDU][SYNC] QR scan success raw payload', decodedText);
-          let parsedPin = '';
-          try {
-            const data = JSON.parse(decodedText);
-            parsedPin = normalizeSyncPin(data.pin || '');
-            if (parsedPin && qs('manual-pin')) qs('manual-pin').value = parsedPin;
-          } catch (_) {
-            parsedPin = normalizeSyncPin(decodedText);
-            if (parsedPin && qs('manual-pin')) qs('manual-pin').value = parsedPin;
-          }
-          closeClientScanner();
-          showToast('สแกนสำเร็จ กำลังส่งคำขอ...', 'success');
-          if (!parsedPin || parsedPin.length !== 6) {
-            showToast('QR ไม่มี PIN ที่ถูกต้อง', 'error');
+      const onDecoded = (decodedText) => {
+        console.log('[FAKDU][SYNC] QR scan success raw payload', decodedText);
+        let parsedPin = '';
+        try {
+          const data = JSON.parse(decodedText);
+          parsedPin = normalizeSyncPin(data.pin || '');
+          if (parsedPin && qs('manual-pin')) qs('manual-pin').value = parsedPin;
+        } catch (_) {
+          parsedPin = normalizeSyncPin(decodedText);
+          if (parsedPin && qs('manual-pin')) qs('manual-pin').value = parsedPin;
+        }
+        closeClientScanner();
+        showToast('สแกนสำเร็จ กำลังส่งคำขอ...', 'success');
+        if (!parsedPin || parsedPin.length !== 6) {
+          showToast('QR ไม่มี PIN ที่ถูกต้อง', 'error');
+          return;
+        }
+        submitClientAccessRequest();
+      };
+
+      if (window.Html5Qrcode) {
+        state.qrScanner = new Html5Qrcode('qr-reader-index');
+        const cameras = await Html5Qrcode.getCameras().catch(() => []);
+        const preferredCamera = cameras.find((cam) => /back|rear|environment/i.test(cam.label || ''))?.id || cameras[0]?.id || { facingMode: 'environment' };
+        await state.qrScanner.start(
+          preferredCamera,
+          { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
+          onDecoded
+        );
+        return;
+      }
+
+      if (!window.BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
+        showToast('อุปกรณ์นี้ยังใช้สแกน QR ไม่ได้', 'error');
+        return;
+      }
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      const holder = qs('qr-reader-index');
+      if (!holder) throw new Error('QR holder not found');
+      holder.innerHTML = '';
+      const video = document.createElement('video');
+      video.setAttribute('playsinline', 'true');
+      video.autoplay = true;
+      video.muted = true;
+      video.className = 'w-full rounded-xl border';
+      holder.appendChild(video);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      let stopped = false;
+      let rafId = 0;
+      const scanLoop = async () => {
+        if (stopped) return;
+        try {
+          const result = await detector.detect(video);
+          const value = String(result?.[0]?.rawValue || '');
+          if (value) {
+            stopped = true;
+            onDecoded(value);
             return;
           }
-          submitClientAccessRequest();
+        } catch (_) {}
+        rafId = requestAnimationFrame(scanLoop);
+      };
+      rafId = requestAnimationFrame(scanLoop);
+      state.qrScanner = {
+        isScanning: true,
+        async stop() {
+          if (stopped) return;
+          stopped = true;
+          if (rafId) cancelAnimationFrame(rafId);
+          stream.getTracks().forEach((track) => track.stop());
+          try { video.pause(); } catch (_) {}
+        },
+        async clear() {
+          holder.innerHTML = '';
         }
-      );
+      };
     } catch (error) {
       console.error(error);
       showToast('เปิดกล้องไม่ได้', 'error');
@@ -4200,6 +4292,7 @@
           return;
         }
       }
+      state.isStaffMode = resolveStaffModeFlag();
       state.hwid = await resolveDbApi().getDeviceId();
       await hydrateClientSessionFromDb();
       await hydrateAppliedOperationsFromDb();
@@ -4224,6 +4317,7 @@
       syncCustomSearchUiMode();
       bindGridZoomControls();
       renderAll();
+      applyStaffModeUi();
       if (IS_CLIENT_NODE) {
         const profile = getClientProfile();
         if (qs('sys-client-name')) qs('sys-client-name').value = profile.profileName;
