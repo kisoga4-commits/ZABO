@@ -116,7 +116,7 @@
     autoSaveTimer: null,
     audioCtx: null,
     hwid: '',
-    isPro: false,
+    isPro: true,
     activeSalesCompare: 'today',
     lastClientHeartbeatAt: 0,
     lastCloudSessionCheckAt: 0,
@@ -2231,52 +2231,17 @@
 
   //* pro/vault open
   async function syncProStatus() {
-    const vault = resolveVaultApi();
-    if (typeof vault.isProActive === 'function') {
-      try {
-        state.isPro = Boolean(await vault.isProActive(state.db));
-      } catch (_) {
-        state.isPro = Boolean(state.db.licenseActive || state.db.licenseToken);
-      }
-    } else {
-      state.isPro = Boolean(state.db.licenseActive || state.db.licenseToken);
-    }
+    state.isPro = true;
+    state.db.licenseActive = true;
     syncCustomSearchUiMode();
   }
 
   async function validateProKey() {
-    const key = qs('pro-key-input')?.value?.trim() || '';
-    if (!key) return showToast('กรอกรหัสปลดล็อกก่อน', 'error');
-    const vault = resolveVaultApi();
-    let result = null;
-    if (typeof vault.activateProKey === 'function') {
-      try {
-        result = await vault.activateProKey({ key, shopId: state.db.shopId, deviceId: state.hwid, db: state.db });
-      } catch (error) {
-        console.error(error);
-      }
-    } else if (typeof vault.validateProKey === 'function') {
-      try {
-        result = await vault.validateProKey(key, state.db.shopId, state.hwid);
-      } catch (error) {
-        console.error(error);
-      }
-    }
-
-    if (result && result.valid === false) {
-      return showToast(result.message || 'คีย์ไม่ถูกต้อง', 'error');
-    }
-    if (!result && key.length < 6) {
-      return showToast('คีย์ไม่ถูกต้อง', 'error');
-    }
-
-    state.db.licenseToken = result?.token || key;
-    logOperation('ACTIVATE_PRO');
     await syncProStatus();
     applyTheme();
     closeModal('modal-pro-unlock');
     saveDb({ render: true, sync: false });
-    showToast('ปลดล็อก PRO สำเร็จ', 'success');
+    showToast('ระบบนี้เปิดใช้ฟรีทุกฟีเจอร์แล้ว', 'success');
   }
 
   function handleLockedFeatureClick() {
@@ -2284,11 +2249,7 @@
   }
 
   function openProModal() {
-    if (state.isPro) {
-      showToast('ปลดล็อก Pro แล้ว', 'success');
-      return;
-    }
-    openModal('modal-pro-unlock');
+    showToast('ระบบนี้เปิดใช้ฟรีทุกฟีเจอร์แล้ว', 'success');
   }
 
   function applyTrialUiGuards() {
