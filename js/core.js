@@ -52,6 +52,7 @@
     sales: [],
     opLog: [],
     fraudLogs: [],
+    members: {},
     recovery: {
       phone: '',
       color: '',
@@ -99,6 +100,7 @@
     pendingAddonItem: null,
     currentAddonQty: 1,
     currentCheckoutTotal: 0,
+    checkoutMemberNameDirty: false,
     qrScanner: null,
     deferredInstallPrompt: null,
     syncButtonResetTimer: null,
@@ -621,6 +623,7 @@
       if (!Array.isArray(merged.carts[i])) merged.carts[i] = [];
     }
     merged.sales = Array.isArray(raw?.sales) ? raw.sales : [];
+    merged.members = (raw?.members && typeof raw.members === 'object' && !Array.isArray(raw.members)) ? raw.members : {};
     merged.opLog = Array.isArray(raw?.opLog) ? raw.opLog : [];
     merged.fraudLogs = Array.isArray(raw?.fraudLogs) ? raw.fraudLogs : [];
     if (!merged.shopId) merged.shopId = makeShopId();
@@ -636,6 +639,64 @@
     return merged;
   }
   //* normalize close
+
+  function sanitizePhone(raw = '') {
+    return String(raw || '').replace(/\D/g, '').slice(0, 10);
+  }
+
+  function findMemberByPhone(phone = '') {
+    const normalizedPhone = sanitizePhone(phone);
+    if (!normalizedPhone || !state.db.members) return null;
+    return state.db.members[normalizedPhone] || null;
+  }
+
+  function renderCheckoutMemberHint(text = '', tone = 'default') {
+    const hint = qs('checkout-member-hint');
+    if (!hint) return;
+    hint.textContent = text || 'ไม่กรอก = ลูกค้าทั่วไป';
+    hint.className = 'text-[10px] font-bold mt-2';
+    if (tone === 'success') {
+      hint.classList.add('text-emerald-600');
+      return;
+    }
+    if (tone === 'warn') {
+      hint.classList.add('text-amber-600');
+      return;
+    }
+    hint.classList.add('text-gray-400');
+  }
+
+  function markCheckoutMemberDirty() {
+    state.checkoutMemberNameDirty = true;
+  }
+
+  function lookupMemberByPhone(rawPhone = '') {
+    const phoneInput = qs('checkout-member-phone');
+    const nameInput = qs('checkout-member-name');
+    if (!phoneInput || !nameInput) return;
+    const normalizedPhone = sanitizePhone(rawPhone || phoneInput.value);
+    phoneInput.value = normalizedPhone;
+    if (!normalizedPhone) {
+      if (!state.checkoutMemberNameDirty) nameInput.value = '';
+      renderCheckoutMemberHint('ไม่กรอก = ลูกค้าทั่วไป');
+      return;
+    }
+    const member = findMemberByPhone(normalizedPhone);
+    if (!member) {
+      if (!state.checkoutMemberNameDirty) nameInput.value = '';
+      renderCheckoutMemberHint('ยังไม่พบสมาชิก: กรอกชื่อแล้วปิดบิลเพื่อสมัครทันที', 'warn');
+      return;
+    }
+    if (!state.checkoutMemberNameDirty || !nameInput.value.trim()) {
+      nameInput.value = member.name || '';
+    }
+    renderCheckoutMemberHint(`สมาชิกเดิม: ${member.name || normalizedPhone}`, 'success');
+  }
+
+  function applyCheckoutMemberPhone() {
+    state.checkoutMemberNameDirty = false;
+    lookupMemberByPhone(qs('checkout-member-phone')?.value || '');
+  }
 
   //* save/load open
   async function saveDb({ render = true } = {}) {
@@ -1396,6 +1457,10 @@
     state.currentCheckoutTotal = total;
     if (qs('checkout-unit-id')) qs('checkout-unit-id').textContent = String(unit.id);
     if (qs('checkout-total')) qs('checkout-total').textContent = formatMoney(total);
+    if (qs('checkout-member-phone')) qs('checkout-member-phone').value = '';
+    if (qs('checkout-member-name')) qs('checkout-member-name').value = '';
+    state.checkoutMemberNameDirty = false;
+    renderCheckoutMemberHint('ไม่กรอก = ลูกค้าทั่วไป');
     if (list) {
       list.innerHTML = unit.orders.map((row, index) => `
         <div class="flex justify-between items-center gap-3 py-3">
@@ -1512,6 +1577,30 @@
     const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
     if (!unit || !unit.orders.length) return;
     const total = unit.orders.reduce((sum, row) => sum + row.total, 0);
+    const memberPhone = sanitizePhone(qs('checkout-member-phone')?.value || '');
+    const memberNameInput = String(qs('checkout-member-name')?.value || '').trim();
+    let memberSnapshot = null;
+    if (memberPhone) {
+      const existing = findMemberByPhone(memberPhone);
+      const resolvedName = memberNameInput || existing?.name || '';
+      const nowMs = Date.now();
+      state.db.members[memberPhone] = {
+        phone: memberPhone,
+        name: resolvedName,
+        firstSeenAt: existing?.firstSeenAt || nowMs,
+        updatedAt: nowMs
+      };
+      memberSnapshot = {
+        phone: memberPhone,
+        name: resolvedName
+      };
+      const api = resolveFirebaseSyncApi();
+      if (api && state.db.shopId) {
+        const payload = { ...state.db.members[memberPhone], shopId: state.db.shopId };
+        if (typeof api.upsertMember === 'function') api.upsertMember(state.db.shopId, payload).catch(() => {});
+        else if (typeof api.writeMember === 'function') api.writeMember(state.db.shopId, payload).catch(() => {});
+      }
+    }
     const timestamp = new Date();
     state.db.sales.push({
       id: `SALE-${Date.now()}`,
@@ -1520,6 +1609,7 @@
       items: clone(unit.orders),
       total,
       method,
+      member: memberSnapshot,
       date: getLocalYYYYMMDD(timestamp),
       time: getTimeHHMM(timestamp),
       startedAt: unit.startTime,
@@ -4107,6 +4197,9 @@
     openCheckout,
     deleteOrderItem,
     confirmPayment,
+    lookupMemberByPhone,
+    applyCheckoutMemberPhone,
+    markCheckoutMemberDirty,
     switchManageSub,
     switchDashTab,
     calculateCustomSalesRealtime,
