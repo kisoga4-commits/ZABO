@@ -307,116 +307,126 @@
     </main>
 
     <script>
-      const mockDB = {
-        menu: [
+      const store = {
+        menus: [
           {
             id: "F001",
-            category: "food",
             name: "ข้าวกะเพราหมูกรอบ",
             price: 89,
-            image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=1200&q=80"
+            image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=1200&q=80",
+            category: "food",
+            active: true
           },
           {
             id: "F002",
-            category: "food",
             name: "ผัดไทยกุ้งสด",
             price: 95,
-            image: "https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=1200&q=80"
+            image: "https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=1200&q=80",
+            category: "food",
+            active: true
           },
           {
             id: "F003",
-            category: "food",
             name: "สปาเก็ตตี้คาโบนารา",
             price: 129,
-            image: "https://images.unsplash.com/photo-1473093226795-af9932fe5856?auto=format&fit=crop&w=1200&q=80"
+            image: "https://images.unsplash.com/photo-1473093226795-af9932fe5856?auto=format&fit=crop&w=1200&q=80",
+            category: "food",
+            active: true
           },
           {
             id: "D001",
-            category: "drink",
             name: "ชาไทยเย็น",
             price: 55,
-            image: "https://images.unsplash.com/photo-1542444459-db63c1f9f0f6?auto=format&fit=crop&w=1200&q=80"
+            image: "https://images.unsplash.com/photo-1542444459-db63c1f9f0f6?auto=format&fit=crop&w=1200&q=80",
+            category: "drink",
+            active: true
           },
           {
             id: "D002",
-            category: "drink",
             name: "เลมอนโซดา",
             price: 65,
-            image: "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=1200&q=80"
+            image: "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=1200&q=80",
+            category: "drink",
+            active: true
           },
           {
             id: "D003",
-            category: "drink",
             name: "อเมริกาโน่เย็น",
             price: 70,
-            image: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=1200&q=80"
+            image: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=1200&q=80",
+            category: "drink",
+            active: false
           }
         ],
         members: [
           {
             id: "M001",
-            fullName: "พลอย สายชิม",
+            name: "พลอย สายชิม",
             phone: "0899991111",
             password: "1234",
             points: 230,
-            tier: "Gold",
-            purchaseHistory: [
-              { date: "2026-04-05", orderId: "SO-412", total: 250 },
-              { date: "2026-04-07", orderId: "SO-425", total: 190 }
-            ]
+            status: "active",
+            mustChangePassword: false
           },
           {
             id: "M002",
-            fullName: "นนท์ กินเพลิน",
+            name: "นนท์ กินเพลิน",
             phone: "0812223333",
             password: "9999",
             points: 120,
-            tier: "Silver",
-            purchaseHistory: [{ date: "2026-04-06", orderId: "SO-420", total: 155 }]
+            status: "active",
+            mustChangePassword: false
           },
           {
             id: "M003",
-            fullName: "เมย์ ชอบชานม",
+            name: "เมย์ ชอบชานม",
             phone: "0825557777",
             password: "5555",
             points: 70,
-            tier: "Bronze",
-            purchaseHistory: [{ date: "2026-04-02", orderId: "SO-401", total: 120 }]
+            status: "inactive",
+            mustChangePassword: true
           }
         ],
         promotions: [
+          { id: "P001", title: "ลดเครื่องดื่ม 15%", type: "percent", value: 15, active: true },
+          { id: "P002", title: "ส่วนลดอาหาร 30 บาท", type: "fixed", value: 30, active: true },
+          { id: "P003", title: "โปรสมาชิกพิเศษ", type: "percent", value: 10, active: false }
+        ],
+        orders: [
           {
-            id: "P001",
-            title: "ซื้อเครื่องดื่ม 2 แก้ว ลด 15%",
-            type: "drink",
-            activeUntil: "2026-04-30",
-            detail: "เฉพาะเมนู drink ในช่วง 14:00-17:00"
+            id: "SO-412",
+            customerType: "member",
+            memberId: "M001",
+            items: [{ menuId: "F001", qty: 1 }, { menuId: "D001", qty: 1 }],
+            subtotal: 144,
+            discount: 0,
+            total: 144,
+            status: "paid",
+            createdAt: "2026-04-05T10:00:00Z"
           },
           {
-            id: "P002",
-            title: "สมาชิกใหม่รับแต้ม x2",
-            type: "member",
-            activeUntil: "2026-05-15",
-            detail: "เมื่อสั่ง food ครบ 150 บาทขึ้นไป"
+            id: "SO-425",
+            customerType: "member",
+            memberId: "M001",
+            items: [{ menuId: "F002", qty: 2 }],
+            subtotal: 190,
+            discount: 0,
+            total: 190,
+            status: "paid",
+            createdAt: "2026-04-07T12:30:00Z"
+          },
+          {
+            id: "SO-420",
+            customerType: "member",
+            memberId: "M002",
+            items: [{ menuId: "F001", qty: 1 }, { menuId: "D002", qty: 1 }],
+            subtotal: 154,
+            discount: 0,
+            total: 154,
+            status: "paid",
+            createdAt: "2026-04-06T14:00:00Z"
           }
-        ],
-        sales: {
-          todayOrders: 52,
-          todayRevenue: 8740,
-          avgBill: 168,
-          topMenu: "ข้าวกะเพราหมูกรอบ"
-        }
-      };
-
-      const dataService = {
-        getMenu: async () => structuredClone(mockDB.menu),
-        getMembers: async () => structuredClone(mockDB.members),
-        getPromotions: async () => structuredClone(mockDB.promotions),
-        getSales: async () => structuredClone(mockDB.sales),
-        loginByPhone: async (phone, password) => {
-          const member = mockDB.members.find((m) => m.phone === phone && m.password === password);
-          return member ? structuredClone(member) : null;
-        }
+        ]
       };
 
       const routes = [
@@ -430,10 +440,42 @@
       ];
 
       const state = {
-        currentMember: mockDB.members[0],
+        currentMemberId: "M001",
         customerType: "guest",
-        orderItems: []
+        orderItems: [],
+        menuTab: "all"
       };
+
+      const getCurrentMember = () => store.members.find((member) => member.id === state.currentMemberId) ?? null;
+      const getMenuById = (menuId) => store.menus.find((menu) => menu.id === menuId);
+
+      function getDashboardSummary() {
+        const paidOrders = store.orders.filter((order) => order.status === "paid");
+        let foodSales = 0;
+        let drinkSales = 0;
+        paidOrders.forEach((order) => {
+          order.items.forEach((item) => {
+            const menu = getMenuById(item.menuId);
+            if (!menu) {
+              return;
+            }
+            const lineTotal = menu.price * item.qty;
+            if (menu.category === "food") {
+              foodSales += lineTotal;
+            } else {
+              drinkSales += lineTotal;
+            }
+          });
+        });
+        return {
+          totalSales: paidOrders.reduce((sum, order) => sum + order.total, 0),
+          foodSales,
+          drinkSales,
+          membersCount: store.members.length,
+          menusCount: store.menus.length,
+          promotionsCount: store.promotions.length
+        };
+      }
 
       function renderNav(activeRoute) {
         const nav = document.querySelector("#nav");
@@ -446,7 +488,7 @@
       }
 
       function addToOrder(itemId) {
-        const menuItem = mockDB.menu.find((item) => item.id === itemId);
+        const menuItem = getMenuById(itemId);
         if (!menuItem) {
           return;
         }
@@ -466,8 +508,78 @@
         renderStorePage();
       }
 
+      function setMenuTab(tab) {
+        state.menuTab = tab;
+        renderStorePage();
+      }
+
+      function updateOrderQty(itemId, change) {
+        const found = state.orderItems.find((item) => item.id === itemId);
+        if (!found) {
+          return;
+        }
+        found.qty += change;
+        if (found.qty <= 0) {
+          state.orderItems = state.orderItems.filter((item) => item.id !== itemId);
+        }
+        renderStorePage();
+      }
+
+      function removeOrderItem(itemId) {
+        state.orderItems = state.orderItems.filter((item) => item.id !== itemId);
+        renderStorePage();
+      }
+
+      function createOrder() {
+        if (state.orderItems.length === 0) {
+          alert("กรุณาเพิ่มสินค้าในออเดอร์ก่อน");
+          return;
+        }
+        const subtotal = state.orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+        const activePromo = store.promotions.find((promo) => promo.active);
+        const discount =
+          activePromo && activePromo.type === "percent"
+            ? Math.round((subtotal * activePromo.value) / 100)
+            : activePromo && activePromo.type === "fixed"
+              ? activePromo.value
+              : 0;
+        const total = Math.max(0, subtotal - discount);
+        const nextId = `SO-${430 + store.orders.length}`;
+        const newOrder = {
+          id: nextId,
+          customerType: state.customerType,
+          memberId: state.customerType === "member" ? state.currentMemberId : null,
+          items: state.orderItems.map((item) => ({ menuId: item.id, qty: item.qty })),
+          subtotal,
+          discount,
+          total,
+          status: "paid",
+          createdAt: new Date().toISOString()
+        };
+        store.orders.unshift(newOrder);
+
+        if (newOrder.memberId) {
+          const member = store.members.find((item) => item.id === newOrder.memberId);
+          if (member) {
+            member.points += Math.floor(total / 25);
+          }
+        }
+
+        state.orderItems = [];
+        alert(`บันทึกออเดอร์ ${nextId} สำเร็จ (mock)`);
+        renderAll();
+      }
+
       function renderOrderSummary() {
-        const orderTotal = state.orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+        const subtotal = state.orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+        const activePromo = store.promotions.find((promo) => promo.active);
+        const discount =
+          activePromo && activePromo.type === "percent"
+            ? Math.round((subtotal * activePromo.value) / 100)
+            : activePromo && activePromo.type === "fixed"
+              ? activePromo.value
+              : 0;
+        const total = Math.max(0, subtotal - discount);
 
         if (state.orderItems.length === 0) {
           return `
@@ -484,7 +596,10 @@
                   <small class="muted">${item.category} • ฿${item.price}</small>
                 </div>
                 <div style="text-align:right">
-                  <span class="qty-pill">x${item.qty}</span>
+                  <span class="qty-pill">x${item.qty}</span><br />
+                  <button type="button" class="button-ghost button-small js-qty" data-id="${item.id}" data-change="-1">-</button>
+                  <button type="button" class="button-ghost button-small js-qty" data-id="${item.id}" data-change="1">+</button>
+                  <button type="button" class="button-danger button-small js-remove" data-id="${item.id}">ลบ</button>
                   <div>฿${(item.price * item.qty).toLocaleString()}</div>
                 </div>
               </div>
@@ -492,13 +607,21 @@
           )
           .join("");
 
-        return `${rows}<div style="padding-top:0.8rem"><strong>รวมทั้งสิ้น: ฿${orderTotal.toLocaleString()}</strong></div>`;
+        return `
+          ${rows}
+          <div style="padding-top:0.8rem">
+            <div>ยอดรวม: ฿${subtotal.toLocaleString()}</div>
+            <div>ส่วนลด (${activePromo ? activePromo.title : "ไม่มี"}): -฿${discount.toLocaleString()}</div>
+            <strong>รวมสุทธิ: ฿${total.toLocaleString()}</strong>
+            <div style="margin-top:0.8rem"><button type="button" id="checkout-order">ยืนยันออเดอร์ (mock)</button></div>
+          </div>
+        `;
       }
 
-      async function renderStorePage() {
-        const menu = await dataService.getMenu();
-        const food = menu.filter((item) => item.category === "food");
-        const drink = menu.filter((item) => item.category === "drink");
+      function renderStorePage() {
+        const menu = store.menus.filter((item) => item.active);
+        const filtered =
+          state.menuTab === "all" ? menu : menu.filter((item) => item.category === state.menuTab);
 
         const createMenuCards = (items) =>
           items
@@ -518,7 +641,7 @@
         document.querySelector("#store").innerHTML = `
           <div class="card">
             <h2>หน้าร้าน (Storefront)</h2>
-            <p class="muted">เลือกเมนู food + drink ในออเดอร์เดียวกันได้ และทดสอบประเภทลูกค้าได้ทันที.</p>
+            <p class="muted">เลือกเมนูจาก mock data เดียวกันกับหลังร้าน และสร้างออเดอร์จำลองได้.</p>
             <div class="customer-switch" style="margin-top:0.8rem">
               <button type="button" class="js-customer-type ${state.customerType === "guest" ? "active" : "button-ghost"}" data-type="guest">Guest</button>
               <button type="button" class="js-customer-type ${state.customerType === "member" ? "active" : "button-ghost"}" data-type="member">Member</button>
@@ -528,18 +651,18 @@
                 ? '<div style="margin-top:0.8rem"><button type="button" id="go-login" class="button-ghost">ไปหน้าล็อกอินสมาชิก</button></div>'
                 : '<small class="muted">ลูกค้า guest: สามารถสั่งได้เลยโดยไม่ต้องล็อกอิน</small>'
             }
+            <div class="customer-switch" style="margin-top:0.8rem">
+              <button type="button" class="js-menu-tab ${state.menuTab === "all" ? "active" : "button-ghost"}" data-tab="all">ทั้งหมด</button>
+              <button type="button" class="js-menu-tab ${state.menuTab === "food" ? "active" : "button-ghost"}" data-tab="food">Food</button>
+              <button type="button" class="js-menu-tab ${state.menuTab === "drink" ? "active" : "button-ghost"}" data-tab="drink">Drink</button>
+            </div>
           </div>
 
           <div class="two-col">
             <div>
               <div class="card">
-                <h3>🍛 Food</h3>
-                <div class="grid food-drink">${createMenuCards(food)}</div>
-              </div>
-
-              <div class="card">
-                <h3>🥤 Drink</h3>
-                <div class="grid food-drink">${createMenuCards(drink)}</div>
+                <h3>เมนูที่เลือกดู: ${state.menuTab.toUpperCase()}</h3>
+                <div class="grid food-drink">${createMenuCards(filtered)}</div>
               </div>
             </div>
 
@@ -557,6 +680,19 @@
         document.querySelectorAll(".js-customer-type").forEach((button) => {
           button.addEventListener("click", () => setCustomerType(button.dataset.type));
         });
+        document.querySelectorAll(".js-menu-tab").forEach((button) => {
+          button.addEventListener("click", () => setMenuTab(button.dataset.tab));
+        });
+        document.querySelectorAll(".js-qty").forEach((button) => {
+          button.addEventListener("click", () => updateOrderQty(button.dataset.id, Number(button.dataset.change)));
+        });
+        document.querySelectorAll(".js-remove").forEach((button) => {
+          button.addEventListener("click", () => removeOrderItem(button.dataset.id));
+        });
+        const checkoutButton = document.querySelector("#checkout-order");
+        if (checkoutButton) {
+          checkoutButton.addEventListener("click", createOrder);
+        }
 
         const goLoginButton = document.querySelector("#go-login");
         if (goLoginButton) {
@@ -605,29 +741,30 @@
           const formData = new FormData(event.target);
           const phone = formData.get("phone").toString().trim();
           const password = formData.get("password").toString().trim();
-          const member = await dataService.loginByPhone(phone, password);
+          const member = store.members.find((item) => item.phone === phone && item.password === password);
 
           if (!member) {
             alert("ไม่พบข้อมูลสมาชิก กรุณาตรวจสอบเบอร์โทร/รหัสผ่าน");
             return;
           }
 
-          state.currentMember = member;
+          state.currentMemberId = member.id;
           state.customerType = "member";
           location.hash = "#profile";
         });
       }
 
-      async function renderProfilePage() {
-        const promotions = await dataService.getPromotions();
-        const member = state.currentMember;
-        const historyRows = member.purchaseHistory
+      function renderProfilePage() {
+        const promotions = store.promotions;
+        const member = getCurrentMember();
+        const memberOrders = store.orders.filter((order) => order.memberId === member.id);
+        const historyRows = memberOrders
           .map(
-            (purchase) => `
+            (order) => `
               <tr>
-                <td>${purchase.date}</td>
-                <td>${purchase.orderId}</td>
-                <td>฿${purchase.total.toLocaleString()}</td>
+                <td>${order.createdAt.slice(0, 10)}</td>
+                <td>${order.id}</td>
+                <td>฿${order.total.toLocaleString()}</td>
               </tr>
             `
           )
@@ -637,10 +774,10 @@
           .map(
             (promo) => `
               <article class="card">
-                <span class="badge">${promo.type}</span>
+                <span class="badge">${promo.type.toUpperCase()}</span>
                 <h4>${promo.title}</h4>
-                <p>${promo.detail}</p>
-                <small class="muted">ถึงวันที่ ${promo.activeUntil}</small>
+                <p>ส่วนลด ${promo.value}${promo.type === "percent" ? "%" : " บาท"}</p>
+                <small class="muted">สถานะ: ${promo.active ? "เปิดใช้งาน" : "ปิดใช้งาน"}</small>
               </article>
             `
           )
@@ -649,11 +786,11 @@
         document.querySelector("#profile").innerHTML = `
           <div class="card">
             <h2>โปรไฟล์สมาชิก</h2>
-            <p><strong>${member.fullName}</strong> (${member.phone}) • Tier ${member.tier}</p>
+            <p><strong>${member.name}</strong> (${member.phone}) • สถานะ: ${member.status}</p>
             <div class="kpis">
               <div class="kpi"><small>แต้มสะสม</small><strong>${member.points} pts</strong></div>
-              <div class="kpi"><small>จำนวนบิลทั้งหมด</small><strong>${member.purchaseHistory.length} บิล</strong></div>
-              <div class="kpi"><small>สถานะระบบ</small><strong>Mock Data</strong></div>
+              <div class="kpi"><small>จำนวนบิลทั้งหมด</small><strong>${memberOrders.length} บิล</strong></div>
+              <div class="kpi"><small>ต้องเปลี่ยนรหัสผ่าน</small><strong>${member.mustChangePassword ? "Yes" : "No"}</strong></div>
             </div>
           </div>
 
@@ -676,38 +813,34 @@
         `;
       }
 
-      async function renderBackofficePage() {
-        const sales = await dataService.getSales();
-        const menu = await dataService.getMenu();
-        const members = await dataService.getMembers();
-        const promotions = await dataService.getPromotions();
+      function renderBackofficePage() {
+        const summary = getDashboardSummary();
 
         document.querySelector("#backoffice").innerHTML = `
           <div class="card">
             <h2>หน้าหลังร้าน (Back Office)</h2>
             <p class="muted">ศูนย์รวมจัดการเมนู สมาชิก โปรโมชั่น และภาพรวมยอดขาย.</p>
             <div class="kpis">
-              <div class="kpi"><small>จำนวนเมนู</small><strong>${menu.length}</strong></div>
-              <div class="kpi"><small>สมาชิกทั้งหมด</small><strong>${members.length}</strong></div>
-              <div class="kpi"><small>โปรโมชั่นที่แสดง</small><strong>${promotions.length}</strong></div>
-              <div class="kpi"><small>ออเดอร์วันนี้</small><strong>${sales.todayOrders}</strong></div>
-              <div class="kpi"><small>ยอดขายวันนี้</small><strong>฿${sales.todayRevenue.toLocaleString()}</strong></div>
-              <div class="kpi"><small>ยอดต่อบิลเฉลี่ย</small><strong>฿${sales.avgBill.toLocaleString()}</strong></div>
-              <div class="kpi"><small>เมนูขายดี</small><strong>${sales.topMenu}</strong></div>
+              <div class="kpi"><small>ยอดขายรวม</small><strong>฿${summary.totalSales.toLocaleString()}</strong></div>
+              <div class="kpi"><small>ยอดขาย food</small><strong>฿${summary.foodSales.toLocaleString()}</strong></div>
+              <div class="kpi"><small>ยอดขาย drink</small><strong>฿${summary.drinkSales.toLocaleString()}</strong></div>
+              <div class="kpi"><small>จำนวนสมาชิก</small><strong>${summary.membersCount}</strong></div>
+              <div class="kpi"><small>จำนวนเมนู</small><strong>${summary.menusCount}</strong></div>
+              <div class="kpi"><small>จำนวนโปรโมชั่น</small><strong>${summary.promotionsCount}</strong></div>
             </div>
           </div>
         `;
       }
 
-      async function renderMenuAdminPage() {
-        const menu = await dataService.getMenu();
+      function renderMenuAdminPage() {
+        const menu = store.menus;
         const foodCards = menu
           .filter((item) => item.category === "food")
           .map(
             (item) => `
               <article class="card menu-card">
                 <img src="${item.image}" alt="${item.name}" />
-                <span class="badge">${item.id}</span>
+                <span class="badge">${item.id} • ${item.active ? "active" : "inactive"}</span>
                 <h4>${item.name}</h4>
                 <div class="price">฿${item.price.toLocaleString()}</div>
                 <div class="table-actions" style="margin-top:0.7rem">
@@ -725,7 +858,7 @@
             (item) => `
               <article class="card menu-card">
                 <img src="${item.image}" alt="${item.name}" />
-                <span class="badge">${item.id}</span>
+                <span class="badge">${item.id} • ${item.active ? "active" : "inactive"}</span>
                 <h4>${item.name}</h4>
                 <div class="price">฿${item.price.toLocaleString()}</div>
                 <div class="table-actions" style="margin-top:0.7rem">
@@ -755,18 +888,29 @@
         `;
       }
 
-      async function renderMemberAdminPage() {
-        const members = await dataService.getMembers();
+      function resetMemberPassword(memberId) {
+        const member = store.members.find((item) => item.id === memberId);
+        if (!member) {
+          return;
+        }
+        member.mustChangePassword = true;
+        alert(`ตั้งค่าให้ ${member.name} ต้องเปลี่ยนรหัสผ่านแล้ว`);
+        renderAll();
+      }
+
+      function renderMemberAdminPage() {
+        const members = store.members;
         const rows = members
           .map(
             (member) => `
               <tr>
                 <td>${member.id}</td>
-                <td>${member.fullName}</td>
+                <td>${member.name}</td>
                 <td>${member.phone}</td>
                 <td>${member.points}</td>
-                <td>${member.tier}</td>
-                <td><button type="button" class="button-danger button-small">Reset Password</button></td>
+                <td>${member.status}</td>
+                <td>${member.mustChangePassword ? "Yes" : "No"}</td>
+                <td><button type="button" data-id="${member.id}" class="button-danger button-small js-reset-pass">Reset Password</button></td>
               </tr>
             `
           )
@@ -781,15 +925,19 @@
           <div class="card">
             <h3>รายการสมาชิก</h3>
             <table>
-              <thead><tr><th>ID</th><th>ชื่อ</th><th>เบอร์โทร</th><th>แต้ม</th><th>Tier</th><th>จัดการ</th></tr></thead>
+              <thead><tr><th>ID</th><th>ชื่อ</th><th>เบอร์โทร</th><th>แต้ม</th><th>สถานะ</th><th>mustChangePassword</th><th>จัดการ</th></tr></thead>
               <tbody>${rows}</tbody>
             </table>
           </div>
         `;
+
+        document.querySelectorAll(".js-reset-pass").forEach((button) => {
+          button.addEventListener("click", () => resetMemberPassword(button.dataset.id));
+        });
       }
 
-      async function renderPromoAdminPage() {
-        const promotions = await dataService.getPromotions();
+      function renderPromoAdminPage() {
+        const promotions = store.promotions;
         const promoRows = promotions
           .map(
             (promo) => `
@@ -797,7 +945,8 @@
                 <td>${promo.id}</td>
                 <td>${promo.title}</td>
                 <td>${promo.type}</td>
-                <td>${promo.activeUntil}</td>
+                <td>${promo.value}</td>
+                <td>${promo.active ? "active" : "inactive"}</td>
               </tr>
             `
           )
@@ -812,29 +961,30 @@
           <div class="card">
             <h3>โปรโมชั่นปัจจุบัน</h3>
             <table>
-              <thead><tr><th>ID</th><th>ชื่อโปร</th><th>ประเภท</th><th>หมดอายุ</th></tr></thead>
+              <thead><tr><th>ID</th><th>ชื่อโปร</th><th>ประเภท</th><th>มูลค่า</th><th>สถานะ</th></tr></thead>
               <tbody>${promoRows}</tbody>
             </table>
           </div>
         `;
       }
 
-      async function renderRoute(routeId) {
+      function renderAll() {
+        renderStorePage();
+        renderLoginPage();
+        renderProfilePage();
+        renderBackofficePage();
+        renderMenuAdminPage();
+        renderMemberAdminPage();
+        renderPromoAdminPage();
+      }
+
+      function renderRoute(routeId) {
         const safeRoute = routes.some((route) => route.id === routeId) ? routeId : "store";
 
         renderNav(safeRoute);
         document.querySelectorAll(".screen").forEach((screen) => screen.classList.remove("active"));
         document.querySelector(`#${safeRoute}`).classList.add("active");
-
-        await Promise.all([
-          renderStorePage(),
-          Promise.resolve(renderLoginPage()),
-          renderProfilePage(),
-          renderBackofficePage(),
-          renderMenuAdminPage(),
-          renderMemberAdminPage(),
-          renderPromoAdminPage()
-        ]);
+        renderAll();
       }
 
       window.addEventListener("hashchange", () => renderRoute(location.hash.replace("#", "")));
