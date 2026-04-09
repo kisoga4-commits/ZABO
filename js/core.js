@@ -985,13 +985,14 @@
     if (qs('display-hwid')) qs('display-hwid').textContent = state.db.shopId || '-';
   }
 
-  async function saveDb({ render = true } = {}) {
+  async function saveDb({ render = true, sync = false } = {}) {
     clearTimeout(state.autoSaveTimer);
     state.autoSaveTimer = setTimeout(async () => {
       const dbApi = resolveDbApi();
       runDbMaintenanceIfNeeded();
       await dbApi.save(state.db);
       scheduleLocalServerBackup();
+      if (sync && !IS_CLIENT_NODE) broadcastSnapshot();
       if (render) renderAfterStateChange();
 
     }, 30);
@@ -2025,7 +2026,7 @@
     if (qs('sub-menu')) qs('sub-menu').classList.toggle('hidden', name !== 'menu');
     if (name === 'menu') {
       renderAdminLists();
-      const activeMenuBtn = qs(state.activeMenuManageSub === 'redeem' ? 'menu-manage-tab-redeem' : 'menu-manage-tab-menu');
+      const activeMenuBtn = qs('menu-manage-tab-menu');
       switchMenuManageTab(state.activeMenuManageSub, activeMenuBtn);
     }
     if (name === 'dash') renderAnalytics();
@@ -2352,7 +2353,6 @@
   function renderAdminLists() {
     const list = qs('admin-menu-list');
     if (qs('menu-count')) qs('menu-count').textContent = String(state.db.items.length);
-    renderRedeemManagementList();
     if (!list) return;
     if (!state.db.items.length) {
       list.innerHTML = '<div class="bg-gray-50 border rounded-[24px] p-6 text-center text-gray-400 font-bold">ยังไม่มีเมนูในระบบ</div>';
@@ -2375,6 +2375,28 @@
               </div>
             </div>
             <div class="mt-3 text-[11px] text-gray-500 font-bold">${item.addons?.length ? `เสริม ${item.addons.map((addon) => `${addon.name}+${addon.price}`).join(', ')}` : 'ไม่มีรายการเสริม'}</div>
+            <div class="mt-3 border rounded-xl p-3 ${Number(item.redeemPoints || 0) > 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-white'}">
+              <div class="flex items-center justify-between gap-2">
+                <label class="inline-flex items-center gap-2 min-w-0 cursor-pointer">
+                  <input type="checkbox" ${Number(item.redeemPoints || 0) > 0 ? 'checked' : ''} onchange="toggleRedeemEligibility('${escapeHtml(item.id)}', this.checked)" class="w-4 h-4 accent-emerald-600">
+                  <span class="font-black text-xs text-gray-700">เปิดสิทธิ์แลกแต้ม</span>
+                </label>
+                <span class="text-[10px] font-black ${Number(item.redeemPoints || 0) > 0 ? 'text-emerald-700' : 'text-gray-500'}">${Number(item.redeemPoints || 0) > 0 ? 'เปิดสิทธิ์แล้ว' : 'ยังไม่เปิดสิทธิ์'}</span>
+              </div>
+              <div class="mt-2 flex items-center gap-2">
+                <input
+                  id="redeem-point-input-${escapeHtml(item.id)}"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value="${Math.max(1, Math.floor(Number(item.redeemPoints || 0) || 1))}"
+                  class="w-28 border rounded-lg p-2 text-sm font-black text-center"
+                />
+                <span class="text-[10px] text-gray-500 font-bold">แต้ม/ชิ้น</span>
+                <button onclick="saveRedeemPoints('${escapeHtml(item.id)}')" class="ml-auto px-3 py-2 rounded-lg bg-emerald-500 text-white text-[11px] font-black">บันทึก</button>
+                <button onclick="clearRedeemPoints('${escapeHtml(item.id)}')" class="px-3 py-2 rounded-lg bg-gray-100 text-gray-600 text-[11px] font-black">ลบสิทธิ์</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -4736,13 +4758,13 @@
   }
 
   function switchMenuManageTab(id, btn) {
-    const tabId = id === 'redeem' ? 'redeem' : 'menu';
+    const tabId = 'menu';
     state.activeMenuManageSub = tabId;
     const menuPane = qs('menu-manage-pane-menu');
     const redeemPane = qs('menu-manage-pane-redeem');
-    if (menuPane) menuPane.classList.toggle('hidden', tabId !== 'menu');
-    if (redeemPane) redeemPane.classList.toggle('hidden', tabId !== 'redeem');
-    document.querySelectorAll('#sub-menu #menu-manage-tab-menu, #sub-menu #menu-manage-tab-redeem').forEach((tab) => {
+    if (menuPane) menuPane.classList.toggle('hidden', false);
+    if (redeemPane) redeemPane.classList.add('hidden');
+    document.querySelectorAll('#sub-menu #menu-manage-tab-menu').forEach((tab) => {
       tab.classList.remove('bg-white', 'text-gray-800', 'shadow-sm');
       tab.classList.add('text-gray-500');
     });
@@ -4908,6 +4930,7 @@
         const target = event.target;
         if (!(target instanceof HTMLInputElement)) return;
         setPromptPayDynamicEnabled(target.checked);
+        if (!IS_CLIENT_NODE) broadcastSnapshot();
         if (qs('modal-checkout') && !qs('modal-checkout').classList.contains('hidden')) updateQrDisplay();
       });
     }
