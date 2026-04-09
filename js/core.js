@@ -4132,10 +4132,12 @@
           parsedPin = normalizeSyncPin(data.pin || '');
           const parsedMode = normalizeClientAccessMode(data.accessMode || data.mode || 'both');
           if (parsedPin && qs('manual-pin')) qs('manual-pin').value = parsedPin;
+          if (parsedPin && qs('manual-pin-visible')) qs('manual-pin-visible').value = parsedPin;
           if (qs('client-access-mode')) qs('client-access-mode').value = parsedMode;
         } catch (_) {
           parsedPin = normalizeSyncPin(decodedText);
           if (parsedPin && qs('manual-pin')) qs('manual-pin').value = parsedPin;
+          if (parsedPin && qs('manual-pin-visible')) qs('manual-pin-visible').value = parsedPin;
         }
         closeClientScanner();
         showToast('สแกนสำเร็จ กำลังส่งคำขอ...', 'success');
@@ -4498,6 +4500,47 @@
     showToast('คัดลอก SHOP ID แล้ว', 'success');
   }
 
+  function syncModalPinToHiddenInput() {
+    const modalPinInput = qs('manual-pin-visible');
+    const hiddenPinInput = qs('manual-pin');
+    if (!modalPinInput || !hiddenPinInput) return '';
+    hiddenPinInput.value = String(modalPinInput.value || '').trim();
+    return hiddenPinInput.value;
+  }
+
+  function openStaffLinkModal() {
+    const modalPinInput = qs('manual-pin-visible');
+    const hiddenPinInput = qs('manual-pin');
+    if (modalPinInput && hiddenPinInput) modalPinInput.value = String(hiddenPinInput.value || '').trim();
+    updateSyncUi();
+    openModal('modal-staff-link');
+  }
+
+  async function submitClientAccessRequestFromModal() {
+    syncModalPinToHiddenInput();
+    return submitClientAccessRequest();
+  }
+
+  async function copyEmployeeLink() {
+    let employeeUrl = '';
+    try {
+      const response = await fetch('/api/employee-link', { cache: 'no-store' });
+      if (response.ok) {
+        const payload = await response.json();
+        employeeUrl = String(payload?.employee_url || '').trim();
+      }
+    } catch (_) {}
+
+    if (!employeeUrl) {
+      const base = window.location.origin || `${window.location.protocol}//${window.location.host}`;
+      employeeUrl = `${base}/?mode=staff`;
+    }
+
+    const copied = await copyTextTwoLayer(employeeUrl);
+    if (!copied) return showToast('คัดลอกลิงก์ไม่สำเร็จ', 'error');
+    showToast('คัดลอกลิงก์เครื่องพนักงานแล้ว', 'success');
+  }
+
   //* timers open
   function startLiveTimers() {
     clearInterval(state.liveTick);
@@ -4701,9 +4744,9 @@
       return;
     }
 
-    if (event.key === 'Enter' && target.id === 'manual-pin') {
+    if (event.key === 'Enter' && (target.id === 'manual-pin' || target.id === 'manual-pin-visible')) {
       event.preventDefault();
-      submitClientAccessRequest();
+      submitClientAccessRequestFromModal();
     }
   });
   //* events close
@@ -4715,6 +4758,8 @@
     installPWA,
     dismissPWAInstallBanner,
     copyUnlockShopId,
+    copyEmployeeLink,
+    openStaffLinkModal,
     switchTab,
     attemptAdmin,
     verifyAdminPin,
@@ -4788,6 +4833,7 @@
     openClientScanner,
     closeClientScanner,
     submitClientAccessRequest,
+    submitClientAccessRequestFromModal,
     submitClientAccess: submitClientAccessRequest,
     handleClientImage,
     saveClientSettings,
