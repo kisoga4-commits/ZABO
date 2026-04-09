@@ -69,8 +69,8 @@
     <div class="top-nav !grid !grid-cols-4">
         <div id="tab-customer" class="nav-tab active" onclick="switchTab('customer', this)"><span class="nav-icon">👨‍👩‍👦</span><span class="nav-label">ลูกค้า</span></div>
         <div id="tab-shop" class="nav-tab" onclick="switchTab('shop', this)"><span class="nav-icon">🧾</span><span class="nav-label">เช็คบิล</span></div>
-        <div id="tab-manage" class="nav-tab" onclick="switchTab('manage', this)"><span class="nav-icon">📊</span><span class="nav-label">หลังร้าน</span></div>
-        <div id="tab-system" class="nav-tab" onclick="switchTab('system', this)"><span class="nav-icon">⚙️</span><span class="nav-label">ระบบ</span></div>
+        <div id="tab-manage" class="nav-tab" onclick="attemptAdmin('manage', this)"><span class="nav-icon">📊</span><span class="nav-label">หลังร้าน</span></div>
+        <div id="tab-system" class="nav-tab" onclick="attemptAdmin('system', this)"><span class="nav-icon">⚙️</span><span class="nav-label">ระบบ</span></div>
     </div>
     <!--** nav close -->
 
@@ -108,6 +108,14 @@
             <div id="ordered-items-list" class="text-xs font-bold text-gray-700 space-y-1"></div>
         </div>
 
+        <div class="bg-white border border-emerald-100 rounded-2xl p-3 mb-3">
+            <label for="order-redeem-member-keyword" class="text-[10px] text-emerald-700 font-black uppercase block mb-2">แลกพอยท์หน้านี้ (กรอกชื่อ/เบอร์ลูกค้า)</label>
+            <div class="flex gap-2 mb-2">
+                <input id="order-redeem-member-keyword" type="text" placeholder="ชื่อสมาชิก หรือเบอร์โทร" class="flex-1 border p-2.5 rounded-xl text-sm font-bold bg-white outline-none">
+                <button onclick="openOrderRedeemPanel()" class="px-3 rounded-xl bg-emerald-500 text-white text-[11px] font-black active:scale-95">🎁 เลือกแลก</button>
+            </div>
+            <p class="text-[10px] text-gray-500 font-bold">เมนูที่แลกได้จะเพิ่มเข้าออร์เดอร์ราคา 0 บาท และหักพอยท์ทันที</p>
+        </div>
         <div id="item-list" class="space-y-3 mb-28"></div>
 
         <div class="cart-dock fixed bottom-0 left-0 w-full max-w-[480px] bg-white shadow-[0_-10px_30px_rgba(0,0,0,0.1)] z-20 mx-auto right-0 rounded-t-[24px] p-3 pb-4 border-t border-gray-100" style="padding-bottom: calc(14px + env(safe-area-inset-bottom));">
@@ -204,7 +212,6 @@
         <div id="sub-menu" class="hidden">
             <div class="flex bg-gray-100 p-1.5 rounded-2xl border mb-4">
                 <button id="menu-manage-tab-menu" onclick="switchMenuManageTab('menu', this)" class="flex-1 rounded-xl bg-white text-gray-800 text-xs font-black py-2 shadow-sm">📦 รายการเมนู</button>
-                <button id="menu-manage-tab-redeem" onclick="switchMenuManageTab('redeem', this)" class="flex-1 rounded-xl text-gray-500 text-xs font-black py-2">🎁 เมนูแลกพอยท์</button>
             </div>
 
             <div id="menu-manage-pane-menu">
@@ -232,24 +239,6 @@
             </div>
             </div>
 
-            <div id="menu-manage-pane-redeem" class="hidden">
-            <div class="bg-white p-5 rounded-[24px] border shadow-sm mt-6">
-                <div class="flex items-start justify-between gap-3 mb-4">
-                    <div>
-                        <h3 class="font-black text-sm text-emerald-700">🎁 เมนูที่ใช้สิทธิ์แลกพอยท์ได้</h3>
-                        <p class="text-[10px] text-gray-500 font-bold mt-1">ติ๊กเพื่อเปิดสิทธิ์ และกำหนดพอยท์ที่ใช้ต่อชิ้นได้ทันที</p>
-                    </div>
-                    <div class="text-right text-[10px] font-black text-gray-500">
-                        <div>ใช้สิทธิ์ได้: <span id="redeem-eligible-count" class="text-emerald-700">0</span></div>
-                        <div>ยังไม่เปิดสิทธิ์: <span id="redeem-disabled-count" class="text-gray-700">0</span></div>
-                    </div>
-                </div>
-                <div class="bg-amber-50 border border-amber-100 text-amber-700 text-[10px] font-black rounded-xl p-3 mb-3">
-                    หากติ๊กเปิดสิทธิ์ ต้องใส่พอยท์มากกว่า 0
-                </div>
-                <div id="redeem-config-list" class="space-y-2"></div>
-            </div>
-            </div>
         </div>
     </section>
     <!--** screen-manage close -->
@@ -611,7 +600,7 @@
             <div class="bg-white p-6 text-center shadow-sm relative z-10">
                 <h2 class="font-black text-2xl mb-1 text-gray-800">เช็คบิล</h2>
                 <p class="theme-text font-black text-4xl mb-1"><span class="lbl-unit text-xl">โต๊ะ</span> <span id="checkout-unit-id"></span></p>
-                <div id="checkout-item-list" class="mt-2 text-xs text-left divide-y border-t border-b py-4 max-h-48 overflow-y-auto font-bold text-gray-700"></div>
+                <div id="checkout-item-list" class="mt-2 text-[11px] text-left divide-y border-t border-b py-3 max-h-40 overflow-y-auto font-bold text-gray-700"></div>
                 <div class="mt-4 flex justify-between items-center text-black">
                     <span class="text-[12px] text-gray-400 font-bold uppercase">ยอดสุทธิ</span>
                     <span class="font-black text-4xl tracking-tighter">฿<span id="checkout-total">0</span></span>
@@ -637,7 +626,6 @@
                             <input id="checkout-member-keyword" type="text" placeholder="เบอร์โทร หรือ ชื่อสมาชิก" class="flex-1 border-2 p-3 rounded-xl text-sm font-bold bg-white outline-none focus:border-primary" oninput="lookupCheckoutMember(this.value)">
                             <button onclick="applyCheckoutMemberLookup()" class="px-3 rounded-xl bg-slate-800 text-white text-[11px] font-black active:scale-95">ค้นหา</button>
                         </div>
-                        <button onclick="openRedeemPointsModal()" class="w-full px-3 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-black active:scale-95">🎁 แลกพอยท์</button>
                     </div>
                     <p id="checkout-member-hint" class="text-[10px] text-gray-400 font-bold mt-2">ไม่กรอก = ลูกค้าทั่วไป</p>
                 </div>
@@ -662,7 +650,7 @@
             <div id="redeem-menu-list" class="space-y-2 max-h-72 overflow-y-auto"></div>
             <div class="mt-4 grid grid-cols-2 gap-3">
                 <button onclick="closeModal('modal-redeem-points')" class="bg-gray-100 text-gray-600 py-3 rounded-xl font-black text-sm active:scale-95">ยกเลิก</button>
-                <button onclick="applyRedeemPointsSelection()" class="bg-emerald-500 text-white py-3 rounded-xl font-black text-sm active:scale-95">เพิ่มเมนูแลกพอยท์</button>
+                <button onclick="applyRedeemPointsSelection()" class="bg-emerald-500 text-white py-3 rounded-xl font-black text-sm active:scale-95">ยืนยันแลกพอยท์</button>
             </div>
         </div>
     </div>

@@ -271,18 +271,8 @@
     if (canvas) return canvas;
     const img = wrapper.querySelector('img');
     if (!img) return null;
-    const fallbackCanvas = document.createElement('canvas');
-    const w = Number(options.width || 150);
-    const h = Number(options.height || 150);
-    fallbackCanvas.width = w;
-    fallbackCanvas.height = h;
-    const ctx = fallbackCanvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, w, h);
-    if (img.complete) ctx.drawImage(img, 0, 0, w, h);
-    else img.onload = () => ctx.drawImage(img, 0, 0, w, h);
-    return fallbackCanvas;
+    img.classList.add('w-full', 'h-full', 'object-contain');
+    return img;
   }
   function isTransferMethod(method = '') {
     const value = String(method || '').toLowerCase();
@@ -384,7 +374,7 @@
     return state.hwid || 'LOCAL';
   }
   function canManageOrders() {
-    return !IS_CLIENT_NODE && !isRestrictedStaffMode();
+    return !IS_CLIENT_NODE && !isRestrictedStaffMode() && state.isAdminLoggedIn;
   }
   function formatDurationFrom(startTs) {
     if (!startTs) return 'ยังไม่เริ่มจับเวลา';
@@ -1175,17 +1165,37 @@
       showToast('โหมดพนักงานไม่สามารถเข้าหลังร้าน/ระบบ', 'error');
       return;
     }
-    switchTab(target, element);
+    if (state.isAdminLoggedIn || target === 'customer' || target === 'shop' || target === 'order') {
+      switchTab(target, element);
+      return;
+    }
+    state.pendingAdminAction = { target, elementId: element?.id || '' };
+    if (qs('admin-pin-input')) qs('admin-pin-input').value = '';
+    openModal('modal-admin-pin');
   }
 
   function verifyAdminPin() {
+    const input = String(qs('admin-pin-input')?.value || '').trim();
+    const expected = String(state.db.adminPin || '1234').trim();
+    if (!input) return showToast('กรุณากรอกรหัส Admin', 'error');
+    if (input !== expected) return showToast('รหัส Admin ไม่ถูกต้อง', 'error');
+    state.isAdminLoggedIn = true;
+    localStorage.setItem(LS_ADMIN, 'true');
     closeModal('modal-admin-pin');
-    showToast('ระบบนี้ไม่ต้องใช้ Admin PIN แล้ว', 'success');
+    showToast('เข้าสู่ระบบ Admin แล้ว', 'success');
+    if (state.pendingAdminAction?.target) {
+      const tabEl = state.pendingAdminAction.elementId ? qs(state.pendingAdminAction.elementId) : null;
+      switchTab(state.pendingAdminAction.target, tabEl);
+    }
+    state.pendingAdminAction = null;
   }
 
   function adminLogout() {
+    state.isAdminLoggedIn = false;
+    localStorage.removeItem(LS_ADMIN);
+    state.pendingAdminAction = null;
     switchTab('customer', qs('tab-customer'));
-    showToast('ระบบนี้ไม่ต้องล็อคแอดมินแล้ว', 'success');
+    showToast('ออกจากระบบ Admin แล้ว', 'success');
   }
   //* tab close
 
@@ -1765,9 +1775,20 @@
     return resolveMemberByKeyword(keyword);
   }
 
+  function getRedeemResolvedMember() {
+    const orderKeyword = String(qs('order-redeem-member-keyword')?.value || '').trim();
+    if (orderKeyword) return resolveMemberByKeyword(orderKeyword);
+    return getCheckoutResolvedMember();
+  }
+
+  function openOrderRedeemPanel() {
+    if (!state.activeUnitId) return showToast('กรุณาเลือกโต๊ะก่อน', 'error');
+    openRedeemPointsModal();
+  }
+
   function openRedeemPointsModal() {
-    const member = getCheckoutResolvedMember();
-    if (!member) return showToast('กรุณากรอกเบอร์โทรหรือชื่อสมาชิกก่อนกดแลกพอยท์', 'error');
+    const member = getRedeemResolvedMember();
+    if (!member) return showToast('กรุณากรอกชื่อสมาชิกหรือเบอร์โทรก่อนแลกพอยท์', 'error');
     const redeemable = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
     if (!redeemable.length) {
       showToast('ยังไม่มีเมนูที่ตั้งค่าแลกพอยท์', 'error');
@@ -1779,22 +1800,52 @@
     const list = qs('redeem-menu-list');
     if (list) {
       list.innerHTML = redeemable.map((item) => `
-        <div class="bg-gray-50 border rounded-xl p-3">
-          <div class="flex justify-between items-start gap-2">
-            <div class="min-w-0">
+        <label class="bg-gray-50 border rounded-xl p-3 flex justify-between items-start gap-2 cursor-pointer">
+            <div class="min-w-0 flex-1">
               <div class="font-black text-sm text-gray-800 truncate">${escapeHtml(item.name)}</div>
               <div class="text-[10px] text-gray-500 font-bold">ปกติ ฿${formatMoney(item.price)} • แลก ${formatMoney(item.redeemPoints)} พอยท์</div>
             </div>
-            <input id="redeem-qty-${escapeHtml(item.id)}" type="number" min="0" step="1" value="0" class="w-16 border rounded-lg p-1.5 text-center font-black text-sm" />
-          </div>
-        </div>
+            <input type="checkbox" class="w-5 h-5 mt-1 redeem-item-checkbox" data-item-id="${escapeHtml(item.id)}" data-points="${Math.max(0, Number(item.redeemPoints || 0))}">
+        </label>
       `).join('');
     }
+    const checkboxes = [...document.querySelectorAll('.redeem-item-checkbox')];
+    const refreshRedeemAvailability = () => {
+      const selectedNeed = checkboxes.reduce((sum, checkbox) => {
+        if (!(checkbox instanceof HTMLInputElement) || !checkbox.checked) return sum;
+        return sum + Math.max(0, Number(checkbox.dataset.points || 0));
+      }, 0);
+      const remain = Math.max(0, Number(member.points || 0) - selectedNeed);
+      if (balanceEl) balanceEl.textContent = `พอยท์คงเหลือ: ${formatMoney(member.points || 0)} (เหลือให้เลือกอีก ${formatMoney(remain)})`;
+      checkboxes.forEach((checkbox) => {
+        if (!(checkbox instanceof HTMLInputElement)) return;
+        if (checkbox.checked) return;
+        const need = Math.max(0, Number(checkbox.dataset.points || 0));
+        checkbox.disabled = need > remain;
+      });
+    };
+    checkboxes.forEach((checkbox) => {
+      if (!(checkbox instanceof HTMLInputElement)) return;
+      checkbox.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        const selectedNeed = checkboxes.reduce((sum, cb) => {
+          if (!(cb instanceof HTMLInputElement) || !cb.checked) return sum;
+          return sum + Math.max(0, Number(cb.dataset.points || 0));
+        }, 0);
+        if (selectedNeed > Number(member.points || 0)) {
+          target.checked = false;
+          showToast('พอยท์ไม่พอสำหรับเมนูที่เลือก', 'error');
+        }
+        refreshRedeemAvailability();
+      });
+    });
+    refreshRedeemAvailability();
     openModal('modal-redeem-points');
   }
 
   function applyRedeemPointsSelection() {
-    const member = getCheckoutResolvedMember();
+    const member = getRedeemResolvedMember();
     if (!member) return showToast('ไม่พบสมาชิกสำหรับแลกพอยท์', 'error');
     const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
     if (!unit) return;
@@ -1803,9 +1854,14 @@
 
     const picked = [];
     let totalNeed = 0;
+    const selectedIds = new Set(
+      [...document.querySelectorAll('.redeem-item-checkbox:checked')]
+        .map((row) => row instanceof HTMLInputElement ? String(row.dataset.itemId || '') : '')
+        .filter(Boolean)
+    );
     redeemable.forEach((item) => {
-      const qty = Math.max(0, Math.floor(Number(qs(`redeem-qty-${item.id}`)?.value || 0)));
-      if (!qty) return;
+      if (!selectedIds.has(String(item.id))) return;
+      const qty = 1;
       const points = Math.max(0, Number(item.redeemPoints || 0));
       const lineNeed = points * qty;
       totalNeed += lineNeed;
@@ -1814,6 +1870,9 @@
     if (!picked.length) return showToast('ยังไม่ได้เลือกเมนูแลกพอยท์', 'error');
     if (totalNeed > Number(member.points || 0)) return showToast('พอยท์ไม่พอ', 'error');
 
+    member.points = Math.max(0, Number(member.points || 0) - totalNeed);
+    member.updatedAt = Date.now();
+    state.db.members[member.id] = member;
     picked.forEach(({ item, qty, points }) => {
       unit.orders.push({
         id: `ORD-RDM-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1825,7 +1884,9 @@
         addons: [],
         createdAt: Date.now(),
         redeemedByPoints: true,
-        redeemPoints: points
+        redeemPoints: points,
+        redeemPointsDeducted: true,
+        redeemedMemberId: member.id
       });
     });
     logOperation('ADD_REDEEM_ITEMS', {
@@ -1955,7 +2016,7 @@
     if (!unit || !unit.orders.length) return;
     const total = unit.orders.reduce((sum, row) => sum + row.total, 0);
     const usedPoints = unit.orders.reduce((sum, row) => {
-      if (!row || !row.redeemedByPoints) return sum;
+      if (!row || !row.redeemedByPoints || row.redeemPointsDeducted) return sum;
       return sum + Math.max(0, Number(row.redeemPoints || 0)) * Math.max(1, Number(row.qty || 1));
     }, 0);
     const memberKeyword = String(qs('checkout-member-keyword')?.value || '').trim();
@@ -4969,6 +5030,7 @@
     editCartItem,
     confirmOrderSend,
     openCheckout,
+    openOrderRedeemPanel,
     deleteOrderItem,
     confirmPayment,
     lookupCheckoutMember,
