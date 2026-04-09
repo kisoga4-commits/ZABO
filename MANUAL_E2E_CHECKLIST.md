@@ -6,15 +6,23 @@
 
 ## 0) เตรียมสภาพแวดล้อมทดสอบ
 
-1. เปิดเซิร์ฟเวอร์
+1. เปิดเซิร์ฟเวอร์ (เครื่องหลัก)
    ```bash
-   python server.py --host 0.0.0.0 --port 8080
+   python3 app.py
    ```
-2. เตรียม 2 อุปกรณ์/2 browser profile
+2. เช็คความพร้อมแบบอัตโนมัติก่อนเริ่มทดสอบจริง
+   ```bash
+   python3 scripts/check_python_runtime_ready.py
+   ```
+3. ถ้าจะใช้ Firebase Sync ให้เช็คเพิ่ม
+   ```bash
+   python3 scripts/check_firebase_sync_ready.py
+   ```
+4. เตรียม 2 อุปกรณ์/2 browser profile
    - **เครื่องหลัก (Master)**: ใช้สำหรับตั้งค่าร้าน + อนุมัติคำขอ
    - **เครื่องลูก (Client/Staff)**: ใช้ขอเชื่อมด้วย PIN/QR และทดสอบโหมด
-3. เปิดทั้งสองฝั่งที่ URL เดียวกัน เช่น:
-   - `http://127.0.0.1:8080/index.html`
+5. เปิดทั้งสองฝั่งที่ URL เดียวกัน เช่น:
+   - `http://127.0.0.1:8000/index.html`
 
 > แนะนำเปิดโหมด private/incognito สำหรับเครื่องลูก เพื่อลดผลจาก localStorage เก่า
 
@@ -162,4 +170,3 @@
 หมายเหตุ:
 - 
 ```
-
