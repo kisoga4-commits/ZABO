@@ -340,16 +340,10 @@
 
             <input id="client-access-mode" type="hidden" value="both">
             <input id="manual-pin" type="hidden">
-
-            <div class="bg-white p-5 rounded-[24px] border shadow-sm mb-6">
-                <div class="flex items-center justify-between gap-3">
-                    <div>
-                        <h3 class="font-black text-base text-slate-800">📲 เชื่อมเครื่องพนักงาน</h3>
-                        <p class="text-[10px] text-slate-500 font-bold">เปิดหน้าต่างเชื่อมต่อจากไอคอนรูปโทรศัพท์บนชื่อแอป</p>
-                    </div>
-                    <button onclick="openStaffLinkModal()" class="px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-black active:scale-95">เปิดหน้าต่างเชื่อมต่อ</button>
-                </div>
-            </div>
+            <select id="legacy-client-access-mode-options" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="customer">customer</option>
+                <option value="shop">shop</option>
+            </select>
 
         <div class="bg-white p-5 rounded-[24px] border shadow-sm mb-6">
             <div class="flex items-start justify-between gap-3 mb-4">

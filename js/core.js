@@ -14,8 +14,10 @@
   const LS_PENDING_PAIR_REQUEST_ID = 'FAKDU_PENDING_PAIR_REQUEST_ID';
   const LS_MENU_IMAGE_CACHE_PREFIX = 'FAKDU_MENU_IMAGE_CACHE_';
   const LS_PROMPTPAY_DYNAMIC = 'promptpay_dynamic';
+  const LS_LAST_DB_MAINTENANCE_AT = 'FAKDU_LAST_DB_MAINTENANCE_AT';
   const MEMBER_BAHT_PER_POINT = 10;
   const HEARTBEAT_INTERVAL_MS = 5000;
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
   const CLIENT_AVATAR_MAX_BYTES = 1.5 * 1024 * 1024;
   const COLOR_MAP = {
     red: 'สีแดง',
@@ -133,7 +135,10 @@
     activeSalesCompare: 'today',
     lastClientHeartbeatAt: 0,
     lastCloudSessionCheckAt: 0,
-    appliedOpsPersistTimer: null
+    appliedOpsPersistTimer: null,
+    employeeLinkFromServer: '',
+    localServerBackupTimer: null,
+    lastLocalServerBackupAt: 0
   };
   const IS_CLIENT_NODE = false;
   //* constants close
@@ -839,11 +844,64 @@
   }
 
   //* save/load open
+  function runDbMaintenanceIfNeeded() {
+    if (IS_CLIENT_NODE) return;
+    const now = Date.now();
+    const last = Number(localStorage.getItem(LS_LAST_DB_MAINTENANCE_AT) || 0);
+    if (last && (now - last) < THIRTY_DAYS_MS) return;
+
+    const cutoff = now - THIRTY_DAYS_MS;
+    if (Array.isArray(state.db.opLog)) {
+      state.db.opLog = state.db.opLog.filter((entry) => Number(entry?.timestamp || entry?.at || 0) >= cutoff);
+    }
+    if (state.db?.sync && Array.isArray(state.db.sync.approvals)) {
+      state.db.sync.approvals = state.db.sync.approvals.filter((entry) => Number(entry?.requestedAt || 0) >= cutoff);
+    }
+    localStorage.setItem(LS_LAST_DB_MAINTENANCE_AT, String(now));
+  }
+
+  async function readDbFromLocalServerBackup() {
+    try {
+      const response = await fetch('/api/local-db', { cache: 'no-store' });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      if (!payload || payload.ok === false) return null;
+      const candidate = payload?.data?.db ?? payload?.data;
+      if (!candidate || typeof candidate !== 'object') return null;
+      return candidate;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function scheduleLocalServerBackup(force = false) {
+    if (IS_CLIENT_NODE) return;
+    const now = Date.now();
+    if (!force && (now - state.lastLocalServerBackupAt) < 5000) return;
+    clearTimeout(state.localServerBackupTimer);
+    state.localServerBackupTimer = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/local-db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            savedAt: Date.now(),
+            appVersion: APP_VERSION,
+            db: state.db
+          })
+        });
+        if (response.ok) state.lastLocalServerBackupAt = Date.now();
+      } catch (_) {}
+    }, force ? 0 : 200);
+  }
+
   async function saveDb({ render = true } = {}) {
     clearTimeout(state.autoSaveTimer);
     state.autoSaveTimer = setTimeout(async () => {
       const dbApi = resolveDbApi();
+      runDbMaintenanceIfNeeded();
       await dbApi.save(state.db);
+      scheduleLocalServerBackup();
       if (render) renderAll();
 
     }, 30);
@@ -1735,6 +1793,14 @@
       };
       genArea.appendChild(onlineQr);
       status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic/Online)`;
+      return;
+    }
+    if (state.db.qrOffline) {
+      offlineImg.src = state.db.qrOffline;
+      offlineImg.classList.remove('hidden');
+      status.textContent = state.db.bank && state.db.ppay
+        ? `${state.db.bank} • ${state.db.ppay} (Fallback Static)`
+        : 'Dynamic ไม่พร้อม ใช้ QR ภาพนิ่งแทน';
       return;
     }
     genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่สามารถสร้าง QR Dynamic ได้<br>ตรวจสอบพร้อมเพย์/อินเทอร์เน็ต</div>';
@@ -3903,7 +3969,8 @@
 
   function updateSyncUi() {
     const qrArea = qs('sync-qr-area');
-    if (qrArea) {
+    const renderSyncQr = () => {
+      if (!qrArea) return;
       qrArea.innerHTML = '';
       const employeeUrl = buildEmployeeLinkUrl();
       if (typeof QRCode === 'function') {
@@ -3920,7 +3987,12 @@
           </div>
         `;
       }
-    }
+    };
+    renderSyncQr();
+    refreshEmployeeLinkFromApi().then((url) => {
+      if (!url) return;
+      renderSyncQr();
+    });
     renderOnlineClientsUi();
   }
 
@@ -4442,6 +4514,25 @@
     showToast('คัดลอก SHOP ID แล้ว', 'success');
   }
 
+  function isLoopbackHostname(hostname = '') {
+    const host = String(hostname || '').trim().toLowerCase();
+    return host === 'localhost' || host === '::1' || host.startsWith('127.');
+  }
+
+  async function refreshEmployeeLinkFromApi() {
+    try {
+      const response = await fetch('/api/employee-link', { cache: 'no-store' });
+      if (!response.ok) return '';
+      const payload = await response.json();
+      const url = String(payload?.employee_url || '').trim();
+      if (!url) return '';
+      state.employeeLinkFromServer = url;
+      return url;
+    } catch (_) {
+      return '';
+    }
+  }
+
   function syncModalPinToHiddenInput() {
     const hiddenPinInput = qs('manual-pin');
     if (!hiddenPinInput) return '';
@@ -4464,35 +4555,33 @@
   }
 
   function buildEmployeeLinkUrl() {
-    let employeeUrl = '';
     const current = new URL(window.location.href);
     const pagePath = current.pathname || '/';
-    employeeUrl = `${current.origin}${pagePath}?mode=staff`;
+    let employeeUrl = `${current.origin}${pagePath}?mode=staff`;
+    const fromServer = String(state.employeeLinkFromServer || '').trim();
+    if (fromServer) {
+      try {
+        employeeUrl = new URL(fromServer, window.location.origin).toString();
+      } catch (_) {}
+    } else if (isLoopbackHostname(current.hostname)) {
+      employeeUrl = `${current.protocol}//${current.hostname}${current.port ? `:${current.port}` : ''}${pagePath}?mode=staff`;
+    }
     const pin = normalizeSyncPin(state.db.sync.currentSyncPin || '');
-    if (pin) employeeUrl += `&pin=${encodeURIComponent(pin)}`;
+    try {
+      const parsed = new URL(employeeUrl, window.location.origin);
+      parsed.searchParams.set('mode', 'staff');
+      if (pin) parsed.searchParams.set('pin', pin);
+      else parsed.searchParams.delete('pin');
+      employeeUrl = parsed.toString();
+    } catch (_) {
+      if (pin) employeeUrl += `&pin=${encodeURIComponent(pin)}`;
+    }
     return employeeUrl;
   }
 
   async function copyEmployeeLink() {
-    let employeeUrl = '';
-    try {
-      const response = await fetch('/api/employee-link', { cache: 'no-store' });
-      if (response.ok) {
-        const payload = await response.json();
-        employeeUrl = String(payload?.employee_url || '').trim();
-      }
-    } catch (_) {}
-
-    if (!employeeUrl) {
-      employeeUrl = buildEmployeeLinkUrl();
-    } else {
-      const pin = normalizeSyncPin(state.db.sync.currentSyncPin || '');
-      if (pin) {
-        const parsed = new URL(employeeUrl, window.location.origin);
-        parsed.searchParams.set('pin', pin);
-        employeeUrl = parsed.toString();
-      }
-    }
+    await refreshEmployeeLinkFromApi();
+    const employeeUrl = buildEmployeeLinkUrl();
 
     const copied = await copyTextTwoLayer(employeeUrl);
     if (!copied) return showToast('คัดลอกลิงก์ไม่สำเร็จ', 'error');
@@ -4576,6 +4665,14 @@
       await hydrateAppliedOperationsFromDb();
       const raw = await resolveDbApi().load();
       state.db = normalizeDb(raw);
+      if (!raw && !IS_CLIENT_NODE) {
+        const recovered = await readDbFromLocalServerBackup();
+        if (recovered) {
+          state.db = normalizeDb(recovered);
+          await resolveDbApi().save(state.db);
+          showToast('กู้ข้อมูลจากไฟล์ในเครื่องสำเร็จ', 'success');
+        }
+      }
       if (!state.db.shopId) state.db.shopId = makeShopId();
       if (IS_CLIENT_NODE && !getStoredClientSession()?.clientSessionToken) {
         const pendingShopId = localStorage.getItem('FAKDU_PENDING_MASTER_SHOP_ID') || '';
@@ -4651,6 +4748,7 @@
       }
       if (!IS_CLIENT_NODE || isClientSessionValid()) {
         showToast('FAKDU พร้อมใช้งาน', 'success');
+        scheduleLocalServerBackup(true);
       }
     } catch (error) {
       console.error(error);
