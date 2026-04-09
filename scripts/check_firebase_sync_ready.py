@@ -55,6 +55,9 @@ def main() -> int:
     checks.append(Check("core.js exists", has_core))
     if has_core:
         core_text = core_js.read_text(encoding="utf-8")
+        if "resolveFirebaseSyncApi" in core_text and "return null;" in core_text:
+            print("ℹ️ SKIP: Firebase sync is disabled by design (LAN-only mode).")
+            return 0
         expects_adapter = "window.FakduSync" in core_text or "window.FakduFirebaseSync" in core_text
         checks.append(Check("core expects Firebase sync adapter", expects_adapter))
 
