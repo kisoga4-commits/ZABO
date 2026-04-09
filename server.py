@@ -4,11 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import queue
 import socket
-import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
@@ -17,13 +15,10 @@ from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
 LOCAL_DB_FILE = Path(__file__).resolve().with_name("fakdu.localdb.json")
-LOCAL_DB_SQLITE_FILE = Path(__file__).resolve().with_name("fakdu.localdb.sqlite3")
 LOCAL_DB_BACKUP_DIR = Path(__file__).resolve().with_name("fakdu.localdb.backups")
 LOCAL_DB_BACKUP_PREFIX = "fakdu.localdb."
 LOCAL_DB_BACKUP_SUFFIX = ".json"
-LOCAL_DB_RETENTION_DAYS = 14
-LOCAL_DB_MAX_BACKUP_FILES = 24
-LOCAL_DB_MIN_BACKUP_INTERVAL_SECONDS = 3 * 60
+LOCAL_DB_RETENTION_DAYS = 30
 
 
 class LocalDbEventBus:
@@ -63,9 +58,6 @@ LOCAL_DB_EVENT_BUS = LocalDbEventBus()
 
 class FakduHandler(SimpleHTTPRequestHandler):
     server_version = "FAKDUPythonServer/1.0"
-    _last_backup_digest: str = ""
-    _last_backup_at: datetime | None = None
-    _backup_lock = threading.Lock()
 
     @staticmethod
     def _resolve_master_ip() -> str:
@@ -104,72 +96,11 @@ class FakduHandler(SimpleHTTPRequestHandler):
         return f"http://{host}:{port}"
 
     @staticmethod
-    def _ensure_sqlite_store() -> None:
-        try:
-            with sqlite3.connect(LOCAL_DB_SQLITE_FILE) as conn:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS local_db_snapshots (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        digest TEXT NOT NULL,
-                        payload TEXT NOT NULL,
-                        saved_at INTEGER,
-                        created_at INTEGER NOT NULL
-                    )
-                    """
-                )
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_local_db_snapshots_created_at ON local_db_snapshots(created_at)")
-                conn.commit()
-        except sqlite3.Error:
-            return
-
-    @staticmethod
-    def _read_latest_sqlite_payload() -> dict | None:
-        if not LOCAL_DB_SQLITE_FILE.exists():
-            return None
-        try:
-            with sqlite3.connect(LOCAL_DB_SQLITE_FILE) as conn:
-                row = conn.execute(
-                    "SELECT payload FROM local_db_snapshots ORDER BY id DESC LIMIT 1"
-                ).fetchone()
-        except sqlite3.Error:
-            return None
-        if not row:
-            return None
-        try:
-            return json.loads(str(row[0]))
-        except Exception:
-            return None
-
-    @staticmethod
     def _prune_old_local_db_files(retention_days: int = LOCAL_DB_RETENTION_DAYS) -> None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
-        cutoff_ts = int(cutoff.timestamp())
-
-        if LOCAL_DB_SQLITE_FILE.exists():
-            try:
-                with sqlite3.connect(LOCAL_DB_SQLITE_FILE) as conn:
-                    conn.execute(
-                        "DELETE FROM local_db_snapshots WHERE created_at < ?",
-                        (cutoff_ts,),
-                    )
-                    conn.execute(
-                        """
-                        DELETE FROM local_db_snapshots
-                        WHERE id NOT IN (
-                            SELECT id FROM local_db_snapshots ORDER BY id DESC LIMIT ?
-                        )
-                        """,
-                        (LOCAL_DB_MAX_BACKUP_FILES,),
-                    )
-                    conn.commit()
-            except sqlite3.Error:
-                pass
-
         if not LOCAL_DB_BACKUP_DIR.exists():
             return
-        files = sorted(LOCAL_DB_BACKUP_DIR.glob(f"{LOCAL_DB_BACKUP_PREFIX}*{LOCAL_DB_BACKUP_SUFFIX}"))
-        for file in files:
+        for file in LOCAL_DB_BACKUP_DIR.glob(f"{LOCAL_DB_BACKUP_PREFIX}*{LOCAL_DB_BACKUP_SUFFIX}"):
             try:
                 if not file.is_file():
                     continue
@@ -178,95 +109,6 @@ class FakduHandler(SimpleHTTPRequestHandler):
                     file.unlink(missing_ok=True)
             except Exception:
                 continue
-        files = sorted(LOCAL_DB_BACKUP_DIR.glob(f"{LOCAL_DB_BACKUP_PREFIX}*{LOCAL_DB_BACKUP_SUFFIX}"))
-        while len(files) > LOCAL_DB_MAX_BACKUP_FILES:
-            oldest = files.pop(0)
-            try:
-                oldest.unlink(missing_ok=True)
-            except Exception:
-                continue
-
-    @staticmethod
-    def _make_backup_digest(payload: dict) -> str:
-        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        return hashlib.sha1(raw).hexdigest()
-
-    @classmethod
-    def _should_write_backup(cls, digest: str) -> bool:
-        now = datetime.now(timezone.utc)
-        with cls._backup_lock:
-            if cls._last_backup_digest == digest:
-                return False
-            if cls._last_backup_at and (now - cls._last_backup_at).total_seconds() < LOCAL_DB_MIN_BACKUP_INTERVAL_SECONDS:
-                return False
-            cls._last_backup_digest = digest
-            cls._last_backup_at = now
-            return True
-
-    @staticmethod
-    def _write_sqlite_snapshot(payload: dict, digest: str) -> None:
-        FakduHandler._ensure_sqlite_store()
-        saved_at = payload.get("savedAt")
-        try:
-            saved_at_num = int(saved_at) if saved_at is not None else None
-        except Exception:
-            saved_at_num = None
-        created_at_num = int(datetime.now(timezone.utc).timestamp())
-        raw_payload = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        try:
-            with sqlite3.connect(LOCAL_DB_SQLITE_FILE) as conn:
-                conn.execute(
-                    """
-                    INSERT INTO local_db_snapshots (digest, payload, saved_at, created_at)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (digest, raw_payload, saved_at_num, created_at_num),
-                )
-                conn.commit()
-        except sqlite3.Error:
-            return
-
-    @staticmethod
-    def _to_saved_at(value) -> int:
-        try:
-            return int(value)
-        except Exception:
-            return 0
-
-    @staticmethod
-    def _read_latest_saved_at() -> int:
-        if not LOCAL_DB_FILE.exists():
-            return 0
-        try:
-            raw = json.loads(LOCAL_DB_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            return 0
-        return FakduHandler._to_saved_at(raw.get("savedAt"))
-
-    @staticmethod
-    def _version_rank(value) -> tuple[int, ...]:
-        text = str(value or "").strip().lower()
-        if not text:
-            return tuple()
-        cleaned = text.replace("v", ".")
-        parts = []
-        for chunk in cleaned.replace("-", ".").split("."):
-            if not chunk:
-                continue
-            digits = "".join(ch for ch in chunk if ch.isdigit())
-            if digits:
-                parts.append(int(digits))
-        return tuple(parts)
-
-    @staticmethod
-    def _read_latest_meta() -> dict:
-        if not LOCAL_DB_FILE.exists():
-            return {}
-        try:
-            raw = json.loads(LOCAL_DB_FILE.read_text(encoding="utf-8"))
-            return raw if isinstance(raw, dict) else {}
-        except Exception:
-            return {}
 
     def _staff_url(self) -> str:
         return f"{self._base_url()}/?{urlencode({'mode': 'staff'})}"
@@ -305,11 +147,6 @@ class FakduHandler(SimpleHTTPRequestHandler):
                     payload["exists"] = True
                 except Exception:
                     payload = {"ok": False, "exists": True, "error": "INVALID_LOCAL_DB_FILE"}
-            else:
-                sqlite_payload = self._read_latest_sqlite_payload()
-                if sqlite_payload is not None:
-                    payload["data"] = sqlite_payload
-                    payload["exists"] = True
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -409,34 +246,11 @@ class FakduHandler(SimpleHTTPRequestHandler):
             "sourceMode": payload.get("sourceMode"),
             "db": data
         }
-
-        incoming_saved_at = self._to_saved_at(safe_payload.get("savedAt"))
-        latest_meta = self._read_latest_meta()
-        latest_saved_at = self._to_saved_at(latest_meta.get("savedAt"))
-        incoming_rank = self._version_rank(safe_payload.get("appVersion"))
-        latest_rank = self._version_rank(latest_meta.get("appVersion"))
-
-        if latest_saved_at and incoming_saved_at and incoming_saved_at < latest_saved_at and not (incoming_rank and latest_rank and incoming_rank > latest_rank):
-            body = json.dumps({
-                "ok": True,
-                "saved": False,
-                "ignored": True,
-                "reason": "STALE_SNAPSHOT",
-                "latestSavedAt": latest_saved_at,
-                "incomingSavedAt": incoming_saved_at,
-            }, ensure_ascii=False).encode("utf-8")
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-
         LOCAL_DB_FILE.write_text(json.dumps(safe_payload, ensure_ascii=False), encoding="utf-8")
-        digest = self._make_backup_digest(safe_payload)
-        if self._should_write_backup(digest):
-            self._write_sqlite_snapshot(safe_payload, digest)
+        LOCAL_DB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        snapshot_file = LOCAL_DB_BACKUP_DIR / f"{LOCAL_DB_BACKUP_PREFIX}{stamp}{LOCAL_DB_BACKUP_SUFFIX}"
+        snapshot_file.write_text(json.dumps(safe_payload, ensure_ascii=False), encoding="utf-8")
         self._prune_old_local_db_files()
         LOCAL_DB_EVENT_BUS.publish({
             "type": "LOCAL_DB_UPDATED",

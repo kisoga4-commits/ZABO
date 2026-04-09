@@ -44,7 +44,6 @@
     bank: '',
     ppay: '',
     qrOffline: '',
-    promptPayDynamic: true,
     adminPin: '1234',
     licenseToken: '',
     licenseActive: false,
@@ -94,24 +93,6 @@
     topBasicMax: 3,
     themePalette: ['#800000', '#1d4ed8', '#0f766e', '#b45309', '#111827']
   };
-  function resolveClientNodeFlag() {
-    try {
-      const params = new URLSearchParams(window.location.search || '');
-      const mode = String(params.get('mode') || '').trim().toLowerCase();
-      const role = String(params.get('role') || '').trim().toLowerCase();
-      const forceClientMode = localStorage.getItem(LS_FORCE_CLIENT_MODE) === 'true';
-      const rawSession = localStorage.getItem('FAKDU_CLIENT_SESSION');
-      const hasClientSession = !!(rawSession && JSON.parse(rawSession || '{}')?.clientSessionToken);
-
-      if (mode === 'client' || role === 'client' || mode === 'node' || role === 'node') return true;
-      // ใช้ LAN เป็นหลัก: ลิงก์เครื่องพนักงาน (?mode=staff) ต้องเข้าเป็น client node เสมอ
-      if (mode === 'staff' || mode === 'employee' || role === 'staff' || role === 'employee') return true;
-      if (forceClientMode || hasClientSession) return true;
-      return false;
-    } catch (_) {
-      return localStorage.getItem(LS_FORCE_CLIENT_MODE) === 'true';
-    }
-  }
   const state = {
     db: structuredClone(DEFAULT_DB),
     isAdminLoggedIn: localStorage.getItem(LS_ADMIN) === 'true',
@@ -130,6 +111,8 @@
     pendingAddonItem: null,
     currentAddonQty: 1,
     currentCheckoutTotal: 0,
+    checkoutMemberInputDirty: false,
+    checkoutMemberPanelVisible: false,
     redeemDraft: [],
     qrScanner: null,
     deferredInstallPrompt: null,
@@ -155,17 +138,15 @@
     appliedOpsPersistTimer: null,
     employeeLinkFromServer: '',
     localServerBackupTimer: null,
-    staffBootstrapTimer: null,
     localServerEventSource: null,
     localServerEventReconnectTimer: null,
     localServerPullTimer: null,
     lastLocalServerBackupAt: 0,
     lastLocalServerSeenSavedAt: 0,
     lastLocalServerSyncToastAt: 0,
-    isApplyingLocalServerSnapshot: false,
-    qrRenderTicket: 0
+    isApplyingLocalServerSnapshot: false
   };
-  const IS_CLIENT_NODE = resolveClientNodeFlag();
+  const IS_CLIENT_NODE = false;
   //* constants close
 
   //* adapter open
@@ -228,25 +209,19 @@
   }
   function toPromptPayTarget(raw = '') {
     const digits = String(raw || '').replace(/[^\d+]/g, '').replace(/\+/g, '');
+    if (digits.length === 11 && digits.startsWith('66')) {
+      return { type: '01', value: `0066${digits.slice(2)}` }; // mobile in +66 / 66 format
+    }
     if (digits.length === 10 && digits.startsWith('0')) {
       return { type: '01', value: `0066${digits.slice(1)}` }; // mobile
     }
     if (digits.length === 13) {
       return { type: '02', value: digits }; // national id / tax id
     }
+    if (digits.length === 15) {
+      return { type: '03', value: digits }; // e-wallet id
+    }
     return null;
-  }
-  function getPromptPayFormatError(raw = '') {
-    const cleaned = String(raw || '').replace(/\D/g, '');
-    if (!cleaned) return 'ยังไม่ได้กรอกเลขพร้อมเพย์';
-    if (cleaned.length === 10 && cleaned.startsWith('0')) return '';
-    if (cleaned.length === 13) return '';
-    if (cleaned.length === 10 && !cleaned.startsWith('0')) return 'เบอร์พร้อมเพย์ต้องขึ้นต้นด้วย 0';
-    return 'รองรับเฉพาะเบอร์มือถือ 10 หลัก (ขึ้นต้น 0) หรือเลข 13 หลักเท่านั้น';
-  }
-  function getPromptPayDynamicQrFallbackUrl(payload = '') {
-    if (!payload) return '';
-    return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=1&data=${encodeURIComponent(payload)}`;
   }
   function emvField(id, value) {
     const text = String(value ?? '');
@@ -296,18 +271,27 @@
     if (canvas) return canvas;
     const img = wrapper.querySelector('img');
     if (!img) return null;
-    img.classList.add('w-full', 'h-full', 'object-contain');
-    return img;
+    const fallbackCanvas = document.createElement('canvas');
+    const w = Number(options.width || 150);
+    const h = Number(options.height || 150);
+    fallbackCanvas.width = w;
+    fallbackCanvas.height = h;
+    const ctx = fallbackCanvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, w, h);
+    if (img.complete) ctx.drawImage(img, 0, 0, w, h);
+    else img.onload = () => ctx.drawImage(img, 0, 0, w, h);
+    return fallbackCanvas;
   }
   function isTransferMethod(method = '') {
     const value = String(method || '').toLowerCase();
     return value === 'transfer' || value === 'qr' || value === 'promptpay';
   }
   function isPromptPayDynamicEnabled() {
-    return Boolean(state.db?.promptPayDynamic);
+    return localStorage.getItem(LS_PROMPTPAY_DYNAMIC) === 'true';
   }
   function setPromptPayDynamicEnabled(enabled) {
-    state.db.promptPayDynamic = Boolean(enabled);
     localStorage.setItem(LS_PROMPTPAY_DYNAMIC, enabled ? 'true' : 'false');
   }
   function escapeHtml(str = '') {
@@ -338,7 +322,6 @@
     const maxWidth = Math.max(320, Number(options.maxWidth || 1024));
     const maxBytes = Math.max(80 * 1024, Number(options.maxBytes || 300 * 1024));
     const outputType = String(options.outputType || 'image/jpeg');
-    const cropSquare = Boolean(options.cropSquare);
     const fallbackDataUrl = await readFileAsDataURL(file);
     if (!file.type || !file.type.startsWith('image/')) return fallbackDataUrl;
 
@@ -348,14 +331,9 @@
       const srcH = Number(sourceImage.naturalHeight || sourceImage.height || 0);
       if (!srcW || !srcH) return fallbackDataUrl;
 
-      const cropSize = cropSquare ? Math.min(srcW, srcH) : 0;
-      const sx = cropSquare ? Math.floor((srcW - cropSize) / 2) : 0;
-      const sy = cropSquare ? Math.floor((srcH - cropSize) / 2) : 0;
-      const baseW = cropSquare ? cropSize : srcW;
-      const baseH = cropSquare ? cropSize : srcH;
-      const scale = Math.min(1, maxWidth / baseW);
-      const drawW = Math.max(1, Math.round(baseW * scale));
-      const drawH = Math.max(1, Math.round(baseH * scale));
+      const scale = Math.min(1, maxWidth / srcW);
+      const drawW = Math.max(1, Math.round(srcW * scale));
+      const drawH = Math.max(1, Math.round(srcH * scale));
       const canvas = document.createElement('canvas');
       canvas.width = drawW;
       canvas.height = drawH;
@@ -363,20 +341,16 @@
       if (!ctx) return fallbackDataUrl;
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, drawW, drawH);
-      if (cropSquare) {
-        ctx.drawImage(sourceImage, sx, sy, cropSize, cropSize, 0, 0, drawW, drawH);
-      } else {
-        ctx.drawImage(sourceImage, 0, 0, drawW, drawH);
-      }
+      ctx.drawImage(sourceImage, 0, 0, drawW, drawH);
 
       if (outputType === 'image/png') {
         return canvas.toDataURL('image/png');
       }
 
-      let quality = 0.82;
+      let quality = 0.86;
       let candidate = canvas.toDataURL(outputType, quality);
-      while (candidate.length > maxBytes * 1.37 && quality > 0.4) {
-        quality -= 0.07;
+      while (candidate.length > maxBytes * 1.37 && quality > 0.5) {
+        quality -= 0.08;
         candidate = canvas.toDataURL(outputType, quality);
       }
       return candidate.length < fallbackDataUrl.length ? candidate : fallbackDataUrl;
@@ -400,7 +374,7 @@
     return state.hwid || 'LOCAL';
   }
   function canManageOrders() {
-    return !IS_CLIENT_NODE && !isRestrictedStaffMode() && state.isAdminLoggedIn;
+    return !IS_CLIENT_NODE && !isRestrictedStaffMode();
   }
   function formatDurationFrom(startTs) {
     if (!startTs) return 'ยังไม่เริ่มจับเวลา';
@@ -491,20 +465,6 @@
     };
   }
 
-  function buildSyncUnitsPayload() {
-    return (Array.isArray(state.db.units) ? state.db.units : []).map((unit, index) => normalizeUnit(unit, Number(unit?.id || index + 1)));
-  }
-
-  function buildSyncPaymentPayload() {
-    return {
-      bank: String(state.db.bank || ''),
-      ppay: String(state.db.ppay || ''),
-      qrOffline: String(state.db.qrOffline || ''),
-      promptPayDynamic: Boolean(state.db.promptPayDynamic),
-      soundEnabled: Boolean(state.db.soundEnabled)
-    };
-  }
-
   function makeCloudSnapshotPayload() {
     return {
       shopId: state.db.shopId,
@@ -516,10 +476,15 @@
       unitType: state.db.unitType,
       unitCount: state.db.unitCount,
       menuMetadata: state.db.items.map((item) => normalizeMenuItemForCloud(item)),
-      units: buildSyncUnitsPayload(),
+      units: state.db.units,
       carts: state.db.carts,
       sales: state.db.sales,
-      settings: buildSyncPaymentPayload(),
+      settings: {
+        bank: state.db.bank || '',
+        ppay: state.db.ppay || '',
+        qrOffline: state.db.qrOffline || '',
+        soundEnabled: Boolean(state.db.soundEnabled)
+      },
       syncSession: {
         syncVersion: Number(state.db.sync.syncVersion || 1),
         currentSyncPin: state.db.sync.currentSyncPin || '',
@@ -529,48 +494,11 @@
     };
   }
 
-  function applySyncedUnits(payloadUnits = [], payloadUnitCount = null) {
-    if (!Array.isArray(payloadUnits)) return;
-    const unitCountFromPayload = Math.max(1, Number(payloadUnitCount || payloadUnits.length || state.db.unitCount || 1));
-    const unitById = new Map(payloadUnits.map((unit, index) => [Number(unit?.id || index + 1), unit]));
-    const nextUnits = [];
-    for (let id = 1; id <= unitCountFromPayload; id += 1) {
-      nextUnits.push(normalizeUnit(unitById.get(id), id));
-    }
-    state.db.units = nextUnits;
-    state.db.unitCount = nextUnits.length;
-  }
-
-  function applySyncedPaymentSettings(settings = null) {
-    if (!settings || typeof settings !== 'object') return;
-    if (Object.prototype.hasOwnProperty.call(settings, 'bank')) {
-      state.db.bank = String(settings.bank || '');
-    }
-    if (Object.prototype.hasOwnProperty.call(settings, 'ppay')) {
-      state.db.ppay = String(settings.ppay || '');
-    }
-    if (Object.prototype.hasOwnProperty.call(settings, 'qrOffline')) {
-      state.db.qrOffline = String(settings.qrOffline || '');
-    }
-    if (Object.prototype.hasOwnProperty.call(settings, 'promptPayDynamic')) {
-      state.db.promptPayDynamic = Boolean(settings.promptPayDynamic);
-      localStorage.setItem(LS_PROMPTPAY_DYNAMIC, state.db.promptPayDynamic ? 'true' : 'false');
-    }
-    if (Object.prototype.hasOwnProperty.call(settings, 'soundEnabled')) {
-      state.db.soundEnabled = Boolean(settings.soundEnabled);
-    }
-  }
-
   function makeSyncMessageId() {
     return `MSG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
   }
   function resolveFirebaseSyncApi() {
-    if (state.firebaseSyncApi) return state.firebaseSyncApi;
-    const api = window.FakduSyncApi || window.fakduSyncApi || null;
-    if (api && typeof api === 'object') {
-      state.firebaseSyncApi = api;
-      return state.firebaseSyncApi;
-    }
+    // LAN-first build: disabled cloud adapter path to reduce runtime overhead.
     return null;
   }
   function getClientStatus(client) {
@@ -700,7 +628,6 @@
 
   //* normalize open
   function normalizeUnit(unit, id) {
-    const checkoutMemberId = String(unit?.checkoutMemberId || '').trim();
     return {
       id,
       status: unit?.status || 'idle',
@@ -708,7 +635,6 @@
       lastActivityAt: unit?.lastActivityAt || null,
       checkoutRequested: Boolean(unit?.checkoutRequested),
       checkoutRequestedAt: unit?.checkoutRequestedAt || null,
-      checkoutMemberId,
       newItemsQty: Number(unit?.newItemsQty || 0),
       lastOrderBy: unit?.lastOrderBy || '',
       orders: Array.isArray(unit?.orders) ? unit.orders.map((order) => ({
@@ -732,12 +658,6 @@
 
   function normalizeDb(raw) {
     const merged = { ...clone(DEFAULT_DB), ...(raw || {}) };
-    if (raw && Object.prototype.hasOwnProperty.call(raw, 'promptPayDynamic')) {
-      merged.promptPayDynamic = Boolean(raw.promptPayDynamic);
-    } else {
-      merged.promptPayDynamic = localStorage.getItem(LS_PROMPTPAY_DYNAMIC) !== 'false';
-    }
-    localStorage.setItem(LS_PROMPTPAY_DYNAMIC, merged.promptPayDynamic ? 'true' : 'false');
     merged.recovery = { ...clone(DEFAULT_DB.recovery), ...(raw?.recovery || {}) };
     merged.sync = {
       ...clone(DEFAULT_DB.sync),
@@ -851,6 +771,69 @@
     return findMemberByName(text);
   }
 
+  function renderCheckoutMemberHint(text = '', tone = 'default') {
+    const hint = qs('checkout-member-hint');
+    if (!hint) return;
+    hint.textContent = text || 'ไม่กรอก = ลูกค้าทั่วไป';
+    hint.className = 'text-[10px] font-bold mt-2';
+    if (tone === 'success') {
+      hint.classList.add('text-emerald-600');
+      return;
+    }
+    if (tone === 'warn') {
+      hint.classList.add('text-amber-600');
+      return;
+    }
+    hint.classList.add('text-gray-400');
+  }
+
+  function markCheckoutMemberDirty() {
+    state.checkoutMemberInputDirty = true;
+  }
+
+  function setCheckoutMemberPanelVisible(visible = false) {
+    state.checkoutMemberPanelVisible = Boolean(visible);
+    const fields = qs('checkout-member-fields');
+    const label = qs('checkout-member-toggle-label');
+    if (fields) fields.classList.toggle('hidden', !state.checkoutMemberPanelVisible);
+    if (label) label.textContent = state.checkoutMemberPanelVisible ? 'ซ่อนช่องสมาชิก' : 'กดเพื่อกรอก';
+  }
+
+  function toggleCheckoutMemberSection() {
+    setCheckoutMemberPanelVisible(!state.checkoutMemberPanelVisible);
+    if (state.checkoutMemberPanelVisible) qs('checkout-member-keyword')?.focus();
+  }
+
+  function lookupCheckoutMember(rawKeyword = '') {
+    const keywordInput = qs('checkout-member-keyword');
+    if (!keywordInput) return null;
+    const keyword = String(rawKeyword || keywordInput.value || '').trim();
+    keywordInput.value = keyword;
+    if (!keyword) {
+      renderCheckoutMemberHint('ไม่กรอก = ลูกค้าทั่วไป');
+      return null;
+    }
+    const member = resolveMemberByKeyword(keyword);
+    if (!member) {
+      renderCheckoutMemberHint('ยังไม่พบสมาชิก: พิมพ์ชื่อหรือเบอร์ แล้วปิดบิลเพื่อสมัครทันที', 'warn');
+      return null;
+    }
+    renderCheckoutMemberHint(`สมาชิกเดิม: ${member.name || member.phone} (${formatMoney(member.points)} แต้ม)`, 'success');
+    return member;
+  }
+
+  function applyCheckoutMemberLookup() {
+    state.checkoutMemberInputDirty = false;
+    lookupCheckoutMember(qs('checkout-member-keyword')?.value || '');
+  }
+
+  function resetCheckoutMemberInputs() {
+    if (qs('checkout-member-keyword')) qs('checkout-member-keyword').value = '';
+    state.checkoutMemberInputDirty = false;
+    setCheckoutMemberPanelVisible(false);
+    renderCheckoutMemberHint('ไม่กรอก = ลูกค้าทั่วไป');
+  }
+
   //* save/load open
   function runDbMaintenanceIfNeeded() {
     if (IS_CLIENT_NODE) return;
@@ -954,25 +937,7 @@
   }
 
   function scheduleLocalServerBackup(force = false) {
-    // อนุญาต staff mode (เครื่องพนักงานที่เข้า ?mode=staff) ส่ง snapshot เข้า local server ได้ด้วย
-    // เพื่อให้ master ดึงผ่าน SSE/poll ได้แบบเรียลไทม์
     if (IS_CLIENT_NODE) return;
-    // กันเคสเครื่องพนักงานยังไม่เคย pull snapshot ล่าสุดจากเครื่องแม่ แล้วดัน push DB เก่าทับค่าใหม่
-    // (เช่น ค่า bank/พร้อมเพย์/QR) ทำให้หน้าเช็คบิลเห็น QR โชว์แล้วหาย
-    if (!force && state.isStaffMode && Number(state.lastLocalServerSeenSavedAt || 0) <= 0) {
-      // staff เครื่องใหม่อาจยังไม่เคย pull snapshot แม่ ทำให้ action แรกเหมือน "ไม่เรียลไทม์"
-      // ให้ bootstrap sync ทันที แล้วค่อย push อีกครั้งเมื่อเห็น savedAt ล่าสุดแล้ว
-      if (!state.staffBootstrapTimer) {
-        state.staffBootstrapTimer = setTimeout(async () => {
-          state.staffBootstrapTimer = null;
-          await pullDbFromLocalServerRealtime();
-          if (Number(state.lastLocalServerSeenSavedAt || 0) > 0) {
-            scheduleLocalServerBackup(true);
-          }
-        }, 120);
-      }
-      return;
-    }
     const now = Date.now();
     if (!force && (now - state.lastLocalServerBackupAt) < 800) return;
     clearTimeout(state.localServerBackupTimer);
@@ -990,9 +955,6 @@
           })
         });
         if (response.ok) {
-          let payload = null;
-          try { payload = await response.json(); } catch (_) {}
-          if (payload?.saved === false && payload?.ignored) return;
           state.lastLocalServerBackupAt = Date.now();
           state.lastLocalServerSeenSavedAt = state.lastLocalServerBackupAt;
         }
@@ -1203,37 +1165,17 @@
       showToast('โหมดพนักงานไม่สามารถเข้าหลังร้าน/ระบบ', 'error');
       return;
     }
-    if (state.isAdminLoggedIn || target === 'customer' || target === 'shop' || target === 'order') {
-      switchTab(target, element);
-      return;
-    }
-    state.pendingAdminAction = { target, elementId: element?.id || '' };
-    if (qs('admin-pin-input')) qs('admin-pin-input').value = '';
-    openModal('modal-admin-pin');
+    switchTab(target, element);
   }
 
   function verifyAdminPin() {
-    const input = String(qs('admin-pin-input')?.value || '').trim();
-    const expected = String(state.db.adminPin || '1234').trim();
-    if (!input) return showToast('กรุณากรอกรหัส Admin', 'error');
-    if (input !== expected) return showToast('รหัส Admin ไม่ถูกต้อง', 'error');
-    state.isAdminLoggedIn = true;
-    localStorage.setItem(LS_ADMIN, 'true');
     closeModal('modal-admin-pin');
-    showToast('เข้าสู่ระบบ Admin แล้ว', 'success');
-    if (state.pendingAdminAction?.target) {
-      const tabEl = state.pendingAdminAction.elementId ? qs(state.pendingAdminAction.elementId) : null;
-      switchTab(state.pendingAdminAction.target, tabEl);
-    }
-    state.pendingAdminAction = null;
+    showToast('ระบบนี้ไม่ต้องใช้ Admin PIN แล้ว', 'success');
   }
 
   function adminLogout() {
-    state.isAdminLoggedIn = false;
-    localStorage.removeItem(LS_ADMIN);
-    state.pendingAdminAction = null;
     switchTab('customer', qs('tab-customer'));
-    showToast('ออกจากระบบ Admin แล้ว', 'success');
+    showToast('ระบบนี้ไม่ต้องล็อคแอดมินแล้ว', 'success');
   }
   //* tab close
 
@@ -1428,19 +1370,19 @@
       return;
     }
     list.innerHTML = state.db.items.map((item, index) => `
-      <button onclick="handleItemClickByIndex(${index})" class="w-full bg-white p-2.5 rounded-[20px] border shadow-sm flex gap-2.5 active:scale-[0.99]">
+      <button onclick="handleItemClickByIndex(${index})" class="w-full bg-white p-3 rounded-[24px] border shadow-sm flex gap-3 active:scale-[0.99]">
         ${item.img
-          ? `<img src="${item.img}" class="w-16 h-16 rounded-[14px] object-cover bg-gray-100">`
-          : `<div class="w-16 h-16 rounded-[14px] bg-gray-100 flex items-center justify-center text-2xl">🍽️</div>`}
+          ? `<img src="${item.img}" class="w-20 h-20 rounded-[18px] object-cover bg-gray-100">`
+          : `<div class="w-20 h-20 rounded-[18px] bg-gray-100 flex items-center justify-center text-3xl">🍽️</div>`}
         <div class="flex-1 text-left min-w-0">
           <div class="flex justify-between gap-2 items-start">
-            <div class="font-black text-base text-gray-800 truncate">${escapeHtml(item.name)}</div>
-            <div class="font-black theme-text text-lg whitespace-nowrap">฿${formatMoney(item.price)}</div>
+            <div class="font-black text-lg text-gray-800 truncate">${escapeHtml(item.name)}</div>
+            <div class="font-black theme-text text-xl whitespace-nowrap">฿${formatMoney(item.price)}</div>
           </div>
-          <div class="mt-1.5 text-[10px] text-gray-500 font-bold">${item.addons?.length ? `มีรายการเสริม ${item.addons.length} ตัวเลือก` : 'แตะเพื่อใส่ตะกร้า'}</div>
-          <div class="mt-1.5 flex flex-wrap gap-1">
+          <div class="mt-2 text-[11px] text-gray-500 font-bold">${item.addons?.length ? `มีรายการเสริม ${item.addons.length} ตัวเลือก` : 'แตะเพื่อใส่ตะกร้า'}</div>
+          <div class="mt-2 flex flex-wrap gap-1.5">
             ${item.addons?.length ? '<div class="inline-flex px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black">+ Add-on</div>' : ''}
-            ${Number(item.redeemPoints || 0) > 0 ? `<div class="inline-flex px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black">แลก ${formatMoney(item.redeemPoints)} พอยท์</div>` : ''}
+            ${Number(item.redeemPoints || 0) > 0 ? `<div class="inline-flex px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black">แลก ${formatMoney(item.redeemPoints)} แต้ม</div>` : ''}
           </div>
         </div>
       </button>
@@ -1557,19 +1499,20 @@
     const list = qs('review-list');
     if (list) {
       list.innerHTML = cart.map((row, index) => `
-        <div class="review-item-row">
-          <div class="review-item-main">
-            <div class="review-item-name">${escapeHtml(row.name)}</div>
-            <div class="review-item-price">฿${formatMoney(row.price)} / รายการ</div>
+        <div class="py-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="font-black text-gray-800 leading-tight break-words">${escapeHtml(row.name)}</div>
+              <div class="text-[11px] text-gray-500 font-bold mt-1">฿${formatMoney(row.price)} / รายการ</div>
+            </div>
+            <div class="font-black theme-text text-right shrink-0">฿${formatMoney(row.total)}</div>
           </div>
-          <div class="review-item-controls">
-            <button onclick="editCartItem(${index}, -1)" class="review-qty-btn" aria-label="ลดจำนวน ${escapeHtml(row.name)}">−</button>
-            <span class="review-qty">${row.qty}</span>
-            <button onclick="editCartItem(${index}, 1)" class="review-qty-btn" aria-label="เพิ่มจำนวน ${escapeHtml(row.name)}">+</button>
+          <div class="mt-3 inline-flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-2 py-1">
+            <button onclick="editCartItem(${index}, -1)" class="w-8 h-8 rounded-lg bg-white border border-gray-200 font-black text-gray-700">−</button>
+            <span class="font-black text-base min-w-[24px] text-center">${row.qty}</span>
+            <button onclick="editCartItem(${index}, 1)" class="w-8 h-8 rounded-lg bg-white border border-gray-200 font-black text-gray-700">+</button>
           </div>
-          <div class="review-item-total">฿${formatMoney(row.total)}</div>
         </div>
-        ${index < cart.length - 1 ? '<div class="review-item-divider" aria-hidden="true"></div>' : ''}
       `).join('');
     }
     const total = cart.reduce((sum, row) => sum + row.total, 0);
@@ -1783,14 +1726,13 @@
     state.currentCheckoutTotal = total;
     if (qs('checkout-unit-id')) qs('checkout-unit-id').textContent = String(unit.id);
     if (qs('checkout-total')) qs('checkout-total').textContent = formatMoney(total);
-    if (qs('checkout-member-keyword')) qs('checkout-member-keyword').value = '';
+    resetCheckoutMemberInputs();
     if (list) {
       list.innerHTML = unit.orders.map((row, index) => `
         <div class="flex justify-between items-center gap-3 py-3">
           <div class="min-w-0 flex-1">
             <div class="font-black text-gray-800 truncate">${escapeHtml(row.name)}</div>
-            <div class="text-[10px] text-gray-400 font-bold mt-1">${thaiDate(row.createdAt)}${row.redeemedByPoints ? ` • แลก ${formatMoney(row.redeemPoints || 0)} พอยท์/ชิ้น` : ''}</div>
-            ${!row.redeemedByPoints && getRedeemPointsForOrderRow(row) > 0 ? `<button onclick="openRedeemPointsModal(${index})" class="mt-1 text-[10px] px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-black">แลกพอยท์</button>` : ''}
+            <div class="text-[10px] text-gray-400 font-bold mt-1">${thaiDate(row.createdAt)}${row.redeemedByPoints ? ` • แลก ${formatMoney(row.redeemPoints || 0)} แต้ม/ชิ้น` : ''}</div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <div class="font-black">x${row.qty}</div>
@@ -1801,120 +1743,91 @@
       `).join('');
     }
     updateQrDisplay();
-    renderCheckoutMemberSummary(unit);
     openModal('modal-checkout');
     const paymentButtons = qs('checkout-payment-buttons');
     if (paymentButtons) paymentButtons.classList.toggle('hidden', IS_CLIENT_NODE);
     renderShopQueue();
   }
 
-  function getRedeemPointsForOrderRow(row) {
-    if (!row) return 0;
-    const explicit = Math.max(0, Number(row.redeemPoints || 0));
-    if (explicit > 0) return explicit;
-    const byId = state.db.items.find((item) => String(item.id) === String(row.itemId || ''));
-    if (byId) return Math.max(0, Number(byId.redeemPoints || 0));
-    const baseName = String(row.baseName || row.name || '').trim().toLowerCase();
-    if (!baseName) return 0;
-    const byName = state.db.items.find((item) => String(item.name || '').trim().toLowerCase() === baseName);
-    return Math.max(0, Number(byName?.redeemPoints || 0));
+  function getCheckoutResolvedMember() {
+    const keyword = String(qs('checkout-member-keyword')?.value || '').trim();
+    if (!keyword) return null;
+    return resolveMemberByKeyword(keyword);
   }
 
-  function openRedeemPointsModal(orderIndex) {
-    closeModal('modal-checkout');
-    const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
-    if (!unit) return;
-    const target = unit.orders[Number(orderIndex)];
-    if (!target) return;
-    if (target.redeemedByPoints) return showToast('รายการนี้แลกพอยท์แล้ว', 'error');
-    const pointsPerItem = getRedeemPointsForOrderRow(target);
-    if (pointsPerItem <= 0) return showToast('เมนูนี้ยังไม่รองรับการแลกพอยท์', 'error');
-    const qty = Math.max(1, Number(target.qty || 1));
-    const totalNeed = pointsPerItem * qty;
-    state.redeemDraft = [{ orderIndex: Number(orderIndex), pointsPerItem, totalNeed }];
-    if (qs('redeem-target-name')) qs('redeem-target-name').textContent = `${target.name} x${qty}`;
-    if (qs('redeem-target-cost')) qs('redeem-target-cost').textContent = `ใช้ ${formatMoney(totalNeed)} พอยท์ (฿${formatMoney(target.total)} → ฿0)`;
-    const attachedMember = getMemberById(unit.checkoutMemberId || '');
-    if (qs('redeem-member-keyword')) {
-      qs('redeem-member-keyword').value = attachedMember ? (attachedMember.phone || attachedMember.name || '') : '';
+  function openRedeemPointsModal() {
+    const member = getCheckoutResolvedMember();
+    if (!member) return showToast('กรุณากรอกเบอร์โทรหรือชื่อสมาชิกก่อนกดแลกแต้ม', 'error');
+    const redeemable = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
+    if (!redeemable.length) {
+      showToast('ยังไม่มีเมนูที่ตั้งค่าแลกแต้ม', 'error');
+      return;
     }
-    if (qs('redeem-member-balance')) {
-      qs('redeem-member-balance').textContent = 'ยังไม่ได้ตรวจสอบสมาชิก';
-      qs('redeem-member-balance').className = 'text-[11px] font-black text-gray-500 mb-3';
+    state.redeemDraft = [];
+    const balanceEl = qs('redeem-member-balance');
+    if (balanceEl) balanceEl.textContent = `แต้มคงเหลือ: ${formatMoney(member.points || 0)}`;
+    const list = qs('redeem-menu-list');
+    if (list) {
+      list.innerHTML = redeemable.map((item) => `
+        <div class="bg-gray-50 border rounded-xl p-3">
+          <div class="flex justify-between items-start gap-2">
+            <div class="min-w-0">
+              <div class="font-black text-sm text-gray-800 truncate">${escapeHtml(item.name)}</div>
+              <div class="text-[10px] text-gray-500 font-bold">ปกติ ฿${formatMoney(item.price)} • แลก ${formatMoney(item.redeemPoints)} แต้ม</div>
+            </div>
+            <input id="redeem-qty-${escapeHtml(item.id)}" type="number" min="0" step="1" value="0" class="w-16 border rounded-lg p-1.5 text-center font-black text-sm" />
+          </div>
+        </div>
+      `).join('');
     }
     openModal('modal-redeem-points');
   }
 
-  function closeRedeemPointsModal(restoreCheckout = true) {
-    closeModal('modal-redeem-points');
-    if (!restoreCheckout) return;
-    if (state.activeUnitId == null) return;
-    openCheckout(Number(state.activeUnitId));
-  }
-
-  function checkRedeemMemberBalance() {
-    const draft = Array.isArray(state.redeemDraft) ? state.redeemDraft[0] : null;
-    if (!draft) return null;
-    const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
-    const attachedMember = getMemberById(unit?.checkoutMemberId || '');
-    const keyword = String(qs('redeem-member-keyword')?.value || '').trim()
-      || String(attachedMember?.phone || attachedMember?.name || '').trim();
-    if (!keyword) {
-      showToast('กรอกชื่อหรือเบอร์สมาชิกก่อน', 'error');
-      return null;
-    }
-    const member = resolveMemberByKeyword(keyword);
-    if (!member) {
-      if (qs('redeem-member-balance')) {
-        qs('redeem-member-balance').textContent = 'ไม่พบสมาชิก';
-        qs('redeem-member-balance').className = 'text-[11px] font-black text-red-500 mb-3';
-      }
-      return null;
-    }
-    const enough = Number(member.points || 0) >= Number(draft.totalNeed || 0);
-    if (qs('redeem-member-balance')) {
-      qs('redeem-member-balance').textContent = enough
-        ? `${member.name || member.phone} มี ${formatMoney(member.points || 0)} พอยท์ (พอแลก)`
-        : `${member.name || member.phone} มี ${formatMoney(member.points || 0)} พอยท์ (ไม่พอ)`;
-      qs('redeem-member-balance').className = `text-[11px] font-black mb-3 ${enough ? 'text-emerald-600' : 'text-red-500'}`;
-    }
-    return member;
-  }
-
   function applyRedeemPointsSelection() {
-    const draft = Array.isArray(state.redeemDraft) ? state.redeemDraft[0] : null;
-    if (!draft) return showToast('ไม่พบรายการที่ต้องการแลกพอยท์', 'error');
-    const member = checkRedeemMemberBalance();
-    if (!member) return showToast('ไม่พบสมาชิกสำหรับแลกพอยท์', 'error');
+    const member = getCheckoutResolvedMember();
+    if (!member) return showToast('ไม่พบสมาชิกสำหรับแลกแต้ม', 'error');
     const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
     if (!unit) return;
-    const orderRow = unit.orders[Number(draft.orderIndex)];
-    if (!orderRow) return showToast('ไม่พบรายการนี้ในบิล', 'error');
-    if (Number(member.points || 0) < Number(draft.totalNeed || 0)) return showToast('พอยท์ไม่พอ', 'error');
+    const redeemable = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
+    if (!redeemable.length) return showToast('ยังไม่มีเมนูแลกแต้ม', 'error');
 
-    member.points = Math.max(0, Number(member.points || 0) - Number(draft.totalNeed || 0));
-    member.updatedAt = Date.now();
-    state.db.members[member.id] = member;
-    if (!unit.checkoutMemberId) unit.checkoutMemberId = member.id;
-    orderRow.price = 0;
-    orderRow.total = 0;
-    orderRow.redeemedByPoints = true;
-    orderRow.redeemPoints = Math.max(0, Number(draft.pointsPerItem || 0));
-    orderRow.redeemPointsDeducted = true;
-    orderRow.redeemedMemberId = member.id;
-    orderRow.name = `${orderRow.baseName || orderRow.name} (แลกพอยท์)`;
-    logOperation('REDEEM_ORDER_ITEM', {
+    const picked = [];
+    let totalNeed = 0;
+    redeemable.forEach((item) => {
+      const qty = Math.max(0, Math.floor(Number(qs(`redeem-qty-${item.id}`)?.value || 0)));
+      if (!qty) return;
+      const points = Math.max(0, Number(item.redeemPoints || 0));
+      const lineNeed = points * qty;
+      totalNeed += lineNeed;
+      picked.push({ item, qty, points, lineNeed });
+    });
+    if (!picked.length) return showToast('ยังไม่ได้เลือกเมนูแลกแต้ม', 'error');
+    if (totalNeed > Number(member.points || 0)) return showToast('แต้มไม่พอ', 'error');
+
+    picked.forEach(({ item, qty, points }) => {
+      unit.orders.push({
+        id: `ORD-RDM-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        itemId: item.id,
+        name: `${item.name} (แลกแต้ม)`,
+        qty,
+        price: 0,
+        total: 0,
+        addons: [],
+        createdAt: Date.now(),
+        redeemedByPoints: true,
+        redeemPoints: points
+      });
+    });
+    logOperation('ADD_REDEEM_ITEMS', {
       unitId: unit.id,
       memberId: member.id,
-      orderId: orderRow.id,
-      totalPoints: Number(draft.totalNeed || 0),
-      pointsPerItem: Number(draft.pointsPerItem || 0)
+      totalPoints: totalNeed,
+      lines: picked.map((row) => ({ itemId: row.item.id, qty: row.qty, points: row.points }))
     });
-    state.redeemDraft = [];
-    closeRedeemPointsModal(false);
+    closeModal('modal-redeem-points');
     saveDb({ render: true, sync: true });
     openCheckout(unit.id);
-    showToast(`แลกรายการสำเร็จ ใช้ ${formatMoney(draft.totalNeed || 0)} พอยท์`, 'success');
+    showToast(`เพิ่มเมนูแลกแต้มให้ ${member.name || member.phone || 'สมาชิก'} แล้ว (${formatMoney(totalNeed)} แต้ม)`, 'success');
   }
 
   function updateQrDisplay() {
@@ -1922,20 +1835,11 @@
     const genArea = qs('qr-gen-area');
     const status = qs('qr-status-text');
     if (!offlineImg || !genArea || !status) return;
-    const renderTicket = Date.now();
-    state.qrRenderTicket = renderTicket;
-    const safeSetStatus = (text = '') => {
-      if (state.qrRenderTicket !== renderTicket) return;
-      status.textContent = text;
-    };
     genArea.innerHTML = '';
-    safeSetStatus('');
+    status.textContent = '';
     const isDynamicEnabled = isPromptPayDynamicEnabled();
     offlineImg.classList.add('hidden');
     genArea.classList.add('hidden');
-    offlineImg.removeAttribute('src');
-    const hasStaticQr = Boolean(state.db.qrOffline);
-    const promptPayError = getPromptPayFormatError(state.db.ppay);
 
     const payload = buildPromptPayPayload(state.db.ppay, state.currentCheckoutTotal, state.db.shopName);
     const qrCanvas = generatePromptPayQrCanvas(state.db.ppay, state.currentCheckoutTotal, {
@@ -1945,88 +1849,43 @@
     });
 
     if (!isDynamicEnabled) {
-      if (hasStaticQr) {
+      if (state.db.qrOffline) {
         offlineImg.src = state.db.qrOffline;
         offlineImg.classList.remove('hidden');
-        safeSetStatus(state.db.bank && state.db.ppay ? `${state.db.bank} • ${state.db.ppay} (Static)` : 'ใช้ QR Static จากรูปที่ร้านอัปโหลด');
+        status.textContent = state.db.bank && state.db.ppay ? `${state.db.bank} • ${state.db.ppay} (Static)` : 'ใช้ QR ที่ร้านอัปไว้ (Static)';
+        return;
+      }
+      if (qrCanvas && payload) {
+        genArea.classList.remove('hidden');
+        genArea.appendChild(qrCanvas);
+        status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Auto Dynamic)`;
         return;
       }
       genArea.classList.remove('hidden');
-      genArea.innerHTML = '<div class="text-xs text-red-500 font-bold text-center">โหมด Static แต่ยังไม่มีรูป QR ที่ร้านอัปโหลด</div>';
-      safeSetStatus('สร้าง QR ไม่ได้: โหมด Static ต้องมี QR ภาพนิ่ง');
+      genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่มี QR แบบภาพนิ่ง และสร้าง Dynamic ไม่ได้<br>กรุณาใส่พร้อมเพย์หรืออัปโหลด QR</div>';
+      status.textContent = 'โหมด Static: ยังไม่มี QR พร้อมใช้งาน';
       return;
     }
 
     genArea.classList.remove('hidden');
-    if (promptPayError) {
-      genArea.innerHTML = `<div class="text-xs text-red-500 font-bold text-center">${escapeHtml(promptPayError)}</div>`;
-      safeSetStatus(`Dynamic ใช้งานไม่ได้: ${promptPayError}`);
-      return;
-    }
     if (qrCanvas && payload) {
       genArea.appendChild(qrCanvas);
-      safeSetStatus(`${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic)`);
+      status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic)`;
       return;
     }
 
-    const fallbackUrl = getPromptPayDynamicQrFallbackUrl(payload);
-    if (fallbackUrl) {
-      offlineImg.onload = () => {
-        if (state.qrRenderTicket !== renderTicket) return;
-        offlineImg.classList.remove('hidden');
-        safeSetStatus(`${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic ผ่าน Online Fallback)`);
-      };
-      offlineImg.onerror = () => {
-        if (state.qrRenderTicket !== renderTicket) return;
-        offlineImg.classList.add('hidden');
-        genArea.innerHTML = '<div class="text-xs text-red-500 font-bold text-center">อุปกรณ์นี้สร้าง QR ไม่ได้ และออนไลน์ fallback ไม่สำเร็จ</div>';
-        safeSetStatus('Dynamic ใช้งานไม่ได้: เครื่องสร้าง QR ไม่ได้ และ fallback ออนไลน์ล้มเหลว/ออฟไลน์');
-      };
-      offlineImg.src = fallbackUrl;
-      safeSetStatus('กำลัง fallback ไปสร้าง QR แบบออนไลน์...');
+    if (state.db.qrOffline) {
+      offlineImg.src = state.db.qrOffline;
+      offlineImg.classList.remove('hidden');
+      status.textContent = state.db.bank && state.db.ppay
+        ? `${state.db.bank} • ${state.db.ppay} (Fallback Static)`
+        : 'Dynamic ไม่พร้อม ใช้ QR ภาพนิ่งแทน';
       return;
     }
-    genArea.innerHTML = '<div class="text-xs text-red-500 font-bold text-center">ยังไม่สามารถสร้าง QR Dynamic ได้</div>';
-    safeSetStatus(typeof QRCode !== 'function'
-      ? 'Dynamic ใช้งานไม่ได้: ไม่พบตัวสร้าง QR และไม่สามารถ fallback ออนไลน์'
-      : 'Dynamic ใช้งานไม่ได้: payload ว่างหรือรูปแบบไม่รองรับ');
-  }
-
-  function renderCheckoutMemberSummary(unit) {
-    const summary = qs('checkout-member-summary');
-    if (!summary) return;
-    const member = getMemberById(unit?.checkoutMemberId || '');
-    if (!member) {
-      summary.className = 'text-[11px] font-black text-slate-500';
-      summary.textContent = 'ยังไม่ได้ผูกสมาชิกกับบิลนี้';
-      return;
-    }
-    summary.className = 'text-[11px] font-black text-emerald-700';
-    summary.textContent = `${member.name || '-'} • ${member.phone || 'ไม่มีเบอร์โทร'} • ${formatMoney(member.points || 0)} พอยท์`;
-  }
-
-  function attachCheckoutMember() {
-    const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
-    if (!unit || !unit.orders.length) return;
-    const keyword = String(qs('checkout-member-keyword')?.value || '').trim();
-    if (!keyword) return showToast('กรอกชื่อหรือเบอร์สมาชิกก่อน', 'error');
-    let member = resolveMemberByKeyword(keyword);
-    if (!member) {
-      const isPhoneKeyword = /^\d{10}$/.test(sanitizePhone(keyword));
-      member = normalizeMemberRecord({
-        name: isPhoneKeyword ? `สมาชิก ${sanitizePhone(keyword)}` : keyword,
-        phone: isPhoneKeyword ? sanitizePhone(keyword) : '',
-        points: 0,
-        firstSeenAt: Date.now(),
-        updatedAt: Date.now()
-      });
-      state.db.members[member.id] = member;
-      showToast('ไม่พบสมาชิกเดิม: เพิ่มสมาชิกใหม่ให้แล้ว', 'success');
-    }
-    unit.checkoutMemberId = member.id;
-    renderCheckoutMemberSummary(unit);
-    saveDb({ render: false, sync: true });
-    showToast(`ผูกสมาชิก ${member.name || member.phone} แล้ว`, 'success');
+    genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่สามารถสร้าง QR Dynamic ได้<br>กรุณาอัปโหลด QR Static ในหน้าระบบเพื่อใช้งานผ่าน LAN</div>';
+    status.textContent = typeof QRCode !== 'function'
+      ? 'ไม่พบตัวสร้าง QR ในเว็บ (QRCode lib) กรุณาอัปโหลด QR Static'
+      : 'ไม่มี QR พร้อมใช้งาน';
   }
 
   function deleteOrderItem(index) {
@@ -2071,17 +1930,46 @@
     if (!unit || !unit.orders.length) return;
     const total = unit.orders.reduce((sum, row) => sum + row.total, 0);
     const usedPoints = unit.orders.reduce((sum, row) => {
-      if (!row || !row.redeemedByPoints || row.redeemPointsDeducted) return sum;
+      if (!row || !row.redeemedByPoints) return sum;
       return sum + Math.max(0, Number(row.redeemPoints || 0)) * Math.max(1, Number(row.qty || 1));
     }, 0);
-    const memberSnapshotSource = getMemberById(unit.checkoutMemberId || '');
-    const memberSnapshot = memberSnapshotSource
-      ? {
-          id: memberSnapshotSource.id,
-          name: memberSnapshotSource.name || '',
-          phone: memberSnapshotSource.phone || ''
-        }
-      : null;
+    const memberKeyword = String(qs('checkout-member-keyword')?.value || '').trim();
+    let memberSnapshot = null;
+    if (memberKeyword) {
+      const normalizedPhone = sanitizePhone(memberKeyword);
+      const existing = resolveMemberByKeyword(memberKeyword);
+      const nowMs = Date.now();
+      const nextMember = normalizeMemberRecord({
+        id: existing?.id || '',
+        phone: normalizedPhone || existing?.phone || '',
+        name: normalizedPhone ? (existing?.name || normalizedPhone) : (existing?.name || memberKeyword),
+        points: existing?.points || 0,
+        firstSeenAt: existing?.firstSeenAt || nowMs,
+        updatedAt: nowMs
+      });
+      const currentPoints = Number(nextMember.points || 0);
+      if (usedPoints > currentPoints) {
+        return showToast('แต้มสมาชิกไม่พอสำหรับรายการแลกแต้ม', 'error');
+      }
+      nextMember.points = currentPoints - usedPoints;
+      const paidAmountForPoint = Math.max(0, total);
+      const earnedPoints = Math.floor(paidAmountForPoint / MEMBER_BAHT_PER_POINT);
+      nextMember.points = Number(nextMember.points || 0) + earnedPoints;
+      state.db.members[nextMember.id] = nextMember;
+      memberSnapshot = {
+        id: nextMember.id,
+        phone: nextMember.phone,
+        name: nextMember.name,
+        usedPoints,
+        earnedPoints
+      };
+      const api = resolveFirebaseSyncApi();
+      if (api && state.db.shopId) {
+        const payload = { ...nextMember, shopId: state.db.shopId };
+        if (typeof api.upsertMember === 'function') api.upsertMember(state.db.shopId, payload).catch(() => {});
+        else if (typeof api.writeMember === 'function') api.writeMember(state.db.shopId, payload).catch(() => {});
+      }
+    }
     const timestamp = new Date();
     state.db.sales.push({
       id: `SALE-${Date.now()}`,
@@ -2105,14 +1993,14 @@
     unit.lastActivityAt = null;
     unit.checkoutRequested = false;
     unit.checkoutRequestedAt = null;
-    unit.checkoutMemberId = '';
     unit.newItemsQty = 0;
     unit.lastOrderBy = '';
     closeModal('modal-checkout');
     saveDb({ render: true, sync: true });
     const paidText = method === 'transfer' ? 'ปิดบิล (โอน/QR) แล้ว' : 'ปิดบิล (เงินสด) แล้ว';
-    const usedText = usedPoints ? ` ใช้ ${usedPoints} พอยท์` : '';
-    showToast(`${paidText}${usedText}`, 'success');
+    const usedText = memberSnapshot?.usedPoints ? ` ใช้ ${memberSnapshot.usedPoints} แต้ม` : '';
+    const pointText = memberSnapshot?.earnedPoints ? ` +${memberSnapshot.earnedPoints} แต้ม` : '';
+    showToast(`${paidText}${usedText}${pointText}`, 'success');
     if (state.activeTab === 'shop') renderShopQueue();
     if (state.activeTab === 'manage') renderAnalytics();
   }
@@ -2473,7 +2361,7 @@
               <div class="min-w-0">
                 <div class="font-black text-lg text-gray-800 truncate">${escapeHtml(item.name)}</div>
                 <div class="text-[11px] text-gray-500 font-bold mt-1">฿${formatMoney(item.price)}</div>
-                ${Number(item.redeemPoints || 0) > 0 ? `<div class="text-[10px] text-emerald-700 font-black mt-1">แลก ${formatMoney(item.redeemPoints)} พอยท์</div>` : ''}
+                ${Number(item.redeemPoints || 0) > 0 ? `<div class="text-[10px] text-emerald-700 font-black mt-1">แลก ${formatMoney(item.redeemPoints)} แต้ม</div>` : ''}
               </div>
               <div class="flex gap-2 shrink-0">
                 <button onclick="editItem('${item.id}')" class="px-3 py-2 rounded-xl bg-white border text-blue-600 text-xs font-black">แก้ไข</button>
@@ -2523,9 +2411,9 @@
               class="w-24 border rounded-lg px-2 py-1.5 text-sm font-black text-center ${checked ? 'bg-white' : 'bg-gray-100'}"
               ${checked ? '' : 'disabled'}
             />
-            <span class="text-[10px] font-black text-gray-500">พอยท์/ชิ้น</span>
+            <span class="text-[10px] font-black text-gray-500">แต้ม/ชิ้น</span>
             <button onclick="saveRedeemEligibility('${escapeHtml(item.id)}')" class="ml-auto px-3 py-1.5 rounded-lg text-[10px] font-black ${checked ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}" ${checked ? '' : 'disabled'}>
-              บันทึกพอยท์
+              บันทึกแต้ม
             </button>
           </div>
         </div>`;
@@ -2547,43 +2435,43 @@
     const target = state.db.items.find((row) => String(row.id) === String(itemId));
     if (!target) return showToast('ไม่พบเมนู', 'error');
     if (!applyItemRedeemPoints(itemId, 10)) return;
-    showToast(`เปิดสิทธิ์แลกพอยท์ให้ ${target.name} แล้ว`, 'success');
+    showToast(`เปิดสิทธิ์แลกแต้มให้ ${target.name} แล้ว`, 'success');
   }
 
   function quickEditRedeemItem(itemId) {
     const target = state.db.items.find((row) => String(row.id) === String(itemId));
     if (!target) return showToast('ไม่พบเมนู', 'error');
     const points = Math.max(1, Number(target.redeemPoints || 1));
-    if (!points) return showToast('พอยท์ต้องมากกว่า 0 (หากต้องการปิดสิทธิ์ ให้กดปุ่มลบสิทธิ์)', 'error');
+    if (!points) return showToast('แต้มต้องมากกว่า 0 (หากต้องการปิดสิทธิ์ ให้กดปุ่มลบสิทธิ์)', 'error');
     if (!applyItemRedeemPoints(itemId, points)) return;
-    showToast(`อัปเดตพอยท์ของ ${target.name} แล้ว`, 'success');
+    showToast(`อัปเดตแต้มของ ${target.name} แล้ว`, 'success');
   }
 
   function quickDisableRedeemItem(itemId) {
     const target = state.db.items.find((row) => String(row.id) === String(itemId));
     if (!target) return showToast('ไม่พบเมนู', 'error');
     if (!applyItemRedeemPoints(itemId, 0)) return;
-    showToast(`ลบสิทธิ์แลกพอยท์ของ ${target.name} แล้ว`, 'success');
+    showToast(`ลบสิทธิ์แลกแต้มของ ${target.name} แล้ว`, 'success');
   }
 
   function toggleRedeemEligibility(itemId, checked) {
     const input = qs(`redeem-point-input-${itemId}`);
     if (!checked) {
       if (!applyItemRedeemPoints(itemId, 0)) return;
-      showToast('ปิดสิทธิ์แลกพอยท์แล้ว', 'success');
+      showToast('ปิดสิทธิ์แลกแต้มแล้ว', 'success');
       return;
     }
     const points = Math.max(1, Math.floor(Number(input?.value || 1)));
     if (!applyItemRedeemPoints(itemId, points)) return;
-    showToast(`เปิดสิทธิ์แลกพอยท์ ${formatMoney(points)} พอยท์/ชิ้น`, 'success');
+    showToast(`เปิดสิทธิ์แลกแต้ม ${formatMoney(points)} แต้ม/ชิ้น`, 'success');
   }
 
   function saveRedeemEligibility(itemId) {
     const input = qs(`redeem-point-input-${itemId}`);
     const points = Math.max(1, Math.floor(Number(input?.value || 0)));
-    if (!points) return showToast('พอยท์ต้องมากกว่า 0', 'error');
+    if (!points) return showToast('แต้มต้องมากกว่า 0', 'error');
     if (!applyItemRedeemPoints(itemId, points)) return;
-    showToast(`บันทึกพอยท์ ${formatMoney(points)} พอยท์/ชิ้นแล้ว`, 'success');
+    showToast(`บันทึกแต้ม ${formatMoney(points)} แต้ม/ชิ้นแล้ว`, 'success');
   }
 
   function openMenuModal(itemId = null) {
@@ -2764,7 +2652,6 @@
     applyTheme();
     saveDb({ render: true, sync: true });
     showToast('บันทึกการตั้งค่าแล้ว', 'success');
-    updateQrSetupHealth();
   }
 
   function getSortedMembers() {
@@ -2843,7 +2730,7 @@
         <div class="min-w-0">
           <div class="font-black text-sm text-slate-800 truncate">${escapeHtml(member.name || '-')}</div>
           <div class="text-[10px] font-bold text-gray-500 truncate">${escapeHtml(member.phone || 'ไม่มีเบอร์โทร')}</div>
-          <div class="text-[10px] font-black text-emerald-600 mt-1">พอยท์ ${formatMoney(member.points || 0)}</div>
+          <div class="text-[10px] font-black text-emerald-600 mt-1">แต้ม ${formatMoney(member.points || 0)}</div>
         </div>
         <div class="flex flex-col gap-1 shrink-0">
           <button onclick="editMemberFromSystem('${escapeHtml(member.id)}')" class="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-[10px] font-black">แก้ไข</button>
@@ -2863,18 +2750,7 @@
         qr: { maxWidth: 1100, maxBytes: 420 * 1024, outputType: 'image/png' },
         temp: { maxWidth: 960, maxBytes: 320 * 1024 }
       };
-      const optimizeConfig = { ...(typeConfig[type] || {}) };
-      if (type === 'logo') {
-        optimizeConfig.cropSquare = true;
-        optimizeConfig.maxWidth = 640;
-        optimizeConfig.maxBytes = 180 * 1024;
-      }
-      if (type === 'temp') {
-        optimizeConfig.cropSquare = true;
-        optimizeConfig.maxWidth = 720;
-        optimizeConfig.maxBytes = 210 * 1024;
-      }
-      result = await optimizeImageFile(file, optimizeConfig);
+      result = await optimizeImageFile(file, typeConfig[type] || {});
     } catch (_) {
       result = await readFileAsDataURL(file);
     }
@@ -2889,7 +2765,6 @@
     if (type === 'qr') {
       state.db.qrOffline = result;
       saveDb({ render: false, sync: true });
-      updateQrSetupHealth();
       showToast('อัปเดต QR Offline แล้ว', 'success');
       return;
     }
@@ -2938,35 +2813,10 @@
 
   function renderSystemPanels() {
     loadSettingsToForm();
-    updateQrSetupHealth();
     updateSyncUi();
     renderClientApprovalList();
     updateSyncCheckStatusUi();
     renderMemberAdminPanel();
-  }
-
-  function updateQrSetupHealth() {
-    const box = qs('sys-qr-health');
-    if (!box) return;
-    const hasPpay = Boolean(toPromptPayTarget(state.db.ppay));
-    const hasQrImage = Boolean(state.db.qrOffline);
-    if (hasPpay && hasQrImage) {
-      box.className = 'text-[11px] font-bold rounded-xl border p-3 bg-emerald-50 border-emerald-200 text-emerald-700';
-      box.textContent = 'พร้อมใช้งาน: มีเบอร์/เลขพร้อมเพย์ถูกต้อง และมีรูป QR สำรองแล้ว';
-      return;
-    }
-    if (hasPpay && !hasQrImage) {
-      box.className = 'text-[11px] font-bold rounded-xl border p-3 bg-blue-50 border-blue-200 text-blue-700';
-      box.textContent = 'พร้อมใช้งานบางส่วน: สร้าง QR Dynamic ได้ แต่ยังไม่มีรูป QR สำรอง';
-      return;
-    }
-    if (!hasPpay && hasQrImage) {
-      box.className = 'text-[11px] font-bold rounded-xl border p-3 bg-amber-50 border-amber-200 text-amber-700';
-      box.textContent = 'ใช้ได้แบบ Static เท่านั้น: ยังไม่ได้ใส่เบอร์/เลขพร้อมเพย์ที่ถูกต้อง';
-      return;
-    }
-    box.className = 'text-[11px] font-bold rounded-xl border p-3 bg-rose-50 border-rose-200 text-rose-700';
-    box.textContent = 'ยังใช้งาน QR ไม่ได้: ยังไม่ได้ใส่เบอร์/เลขพร้อมเพย์ และยังไม่ได้อัปโหลดรูป QR';
   }
   //* system close
 
@@ -3301,10 +3151,18 @@
     } else if (Array.isArray(payload.items)) {
       state.db.items = payload.items;
     }
-    if (Array.isArray(payload.units)) applySyncedUnits(payload.units, payload.unitCount);
+    if (Array.isArray(payload.units)) {
+      state.db.units = payload.units.map((unit, index) => normalizeUnit(unit, index + 1));
+      state.db.unitCount = state.db.units.length;
+    }
     if (payload.carts && typeof payload.carts === 'object') state.db.carts = payload.carts;
     if (Array.isArray(payload.sales)) state.db.sales = payload.sales;
-    applySyncedPaymentSettings(payload.settings);
+    if (payload.settings && typeof payload.settings === 'object') {
+      state.db.bank = payload.settings.bank || state.db.bank;
+      state.db.ppay = payload.settings.ppay || state.db.ppay;
+      state.db.qrOffline = payload.settings.qrOffline || state.db.qrOffline;
+      state.db.soundEnabled = Boolean(payload.settings.soundEnabled);
+    }
     saveDb({ render: true, sync: false });
   }
 
@@ -3392,8 +3250,7 @@
     if (/client\.html$/i.test(window.location.pathname || '')) return;
     console.log('[FAKDU][SYNC] redirect to client page', { reason, path: window.location.pathname });
     if (reason) showToast(reason, 'success');
-    applyClientAccessModeUi();
-    switchTab('customer', qs('tab-customer'));
+    showToast('โหมดอุปกรณ์เสริมถูกปิดในรุ่น Offline-only', 'error');
   }
 
   async function persistClientSession(session = null) {
@@ -4878,6 +4735,13 @@
   //* init open
   async function init() {
     try {
+      if (!IS_CLIENT_NODE && localStorage.getItem(LS_FORCE_CLIENT_MODE) === 'true') {
+        const lastSession = getStoredClientSession();
+        if (lastSession?.clientSessionToken) {
+          showToast('โหมดอุปกรณ์เสริมถูกปิดในรุ่น Offline-only', 'error');
+          return;
+        }
+      }
       state.isStaffMode = resolveStaffModeFlag();
       state.hwid = await resolveDbApi().getDeviceId();
       await hydrateClientSessionFromDb();
@@ -4958,9 +4822,6 @@
           state.db.items = [];
           state.db.units = [];
           state.db.unitCount = 0;
-          if (urlPin && !localStorage.getItem(LS_PENDING_PAIR_REQUEST_ID)) {
-            submitClientAccessRequestFromModal();
-          }
         }
       }
       const today = getLocalYYYYMMDD();
@@ -5029,21 +4890,6 @@
         if (qs('modal-checkout') && !qs('modal-checkout').classList.contains('hidden')) updateQrDisplay();
       });
     }
-    const ppayInput = qs('sys-ppay');
-    if (ppayInput) {
-      ppayInput.addEventListener('input', () => {
-        updateQrSetupHealth();
-        const checkoutModal = qs('modal-checkout');
-        if (checkoutModal && !checkoutModal.classList.contains('hidden')) updateQrDisplay();
-      });
-    }
-    const bankInput = qs('sys-bank');
-    if (bankInput) {
-      bankInput.addEventListener('input', () => {
-        const checkoutModal = qs('modal-checkout');
-        if (checkoutModal && !checkoutModal.classList.contains('hidden')) updateQrDisplay();
-      });
-    }
     document.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
@@ -5087,13 +4933,14 @@
     editCartItem,
     confirmOrderSend,
     openCheckout,
-    attachCheckoutMember,
     deleteOrderItem,
     confirmPayment,
+    lookupCheckoutMember,
+    applyCheckoutMemberLookup,
     openRedeemPointsModal,
-    closeRedeemPointsModal,
-    checkRedeemMemberBalance,
     applyRedeemPointsSelection,
+    toggleCheckoutMemberSection,
+    markCheckoutMemberDirty,
     switchManageSub,
     switchMenuManageTab,
     switchDashTab,

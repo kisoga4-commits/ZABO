@@ -482,12 +482,8 @@ hr {
   transition: all 0.2s ease;
 }
 
-.cart-dock {
-  backdrop-filter: blur(6px);
-}
-
 #item-list > button {
-  min-height: 78px;
+  min-height: 96px;
 }
 
 .send-order-btn.is-disabled {
@@ -750,90 +746,6 @@ hr {
   box-shadow: var(--shadow-sm);
 }
 
-#modal-review #review-list {
-  display: block;
-  gap: 0;
-}
-
-#modal-review #review-list > * {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.review-item-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 2px;
-}
-
-.review-item-main {
-  min-width: 0;
-}
-
-.review-item-name {
-  font-weight: 900;
-  color: #111827;
-  font-size: 12px;
-  line-height: 1.15;
-  word-break: break-word;
-}
-
-.review-item-price {
-  margin-top: 1px;
-  color: #6b7280;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.review-item-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  padding: 1px 3px;
-}
-
-.review-qty-btn {
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #374151;
-  font-weight: 900;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.review-qty {
-  min-width: 14px;
-  text-align: center;
-  font-weight: 900;
-  font-size: 11px;
-  color: #111827;
-}
-
-.review-item-total {
-  font-size: 13px;
-  font-weight: 900;
-  color: var(--theme-primary, #111827);
-  white-space: nowrap;
-  text-align: right;
-}
-
-.review-item-divider {
-  height: 1px;
-  background: #e5e7eb;
-  margin: 0 2px;
-}
-
 #shop-request-count,
 #menu-count,
 #client-approval-count,
@@ -1020,6 +932,7 @@ hr {
 #modal-recovery-setup,
 #modal-menu-form,
 #modal-addon-select,
+#modal-pro-unlock,
 #modal-review,
 #modal-checkout,
 #modal-sales-insight,
@@ -1045,6 +958,7 @@ hr {
 #modal-recovery-setup.open,
 #modal-menu-form.open,
 #modal-addon-select.open,
+#modal-pro-unlock.open,
 #modal-review.open,
 #modal-checkout.open,
 #modal-sales-insight.open,
@@ -1063,6 +977,7 @@ hr {
 #modal-recovery-setup > *,
 #modal-menu-form > *,
 #modal-addon-select > *,
+#modal-pro-unlock > *,
 #modal-review > *,
 #modal-checkout > *,
 #modal-sales-insight > *,
@@ -1126,6 +1041,7 @@ hr {
 
 #admin-pin-input,
 #manual-pin,
+#pro-key-input,
 #rec-ans-phone,
 #setup-rec-phone,
 #form-menu-name,
@@ -1372,8 +1288,7 @@ hr {
     margin-bottom: 138px !important;
   }
 
-  #screen-order > .fixed,
-  .cart-dock {
+  #screen-order > .fixed {
     max-width: calc(100vw - 8px) !important;
     border-radius: 18px 18px 0 0 !important;
     padding: 12px 12px 18px !important;
@@ -1391,6 +1306,7 @@ hr {
   #modal-recovery-setup > *,
   #modal-menu-form > *,
   #modal-addon-select > *,
+  #modal-pro-unlock > *,
   #modal-review > *,
   #modal-checkout > *,
   #modal-client-entry > *,
