@@ -197,12 +197,18 @@
     return Number(n || 0).toLocaleString('th-TH');
   }
   function toPromptPayTarget(raw = '') {
-    const digits = String(raw || '').replace(/\D/g, '');
+    const digits = String(raw || '').replace(/[^\d+]/g, '').replace(/\+/g, '');
+    if (digits.length === 11 && digits.startsWith('66')) {
+      return { type: '01', value: `0066${digits.slice(2)}` }; // mobile in +66 / 66 format
+    }
     if (digits.length === 10 && digits.startsWith('0')) {
       return { type: '01', value: `0066${digits.slice(1)}` }; // mobile
     }
     if (digits.length === 13) {
       return { type: '02', value: digits }; // national id / tax id
+    }
+    if (digits.length === 15) {
+      return { type: '03', value: digits }; // e-wallet id
     }
     return null;
   }
@@ -4459,8 +4465,9 @@
 
   function buildEmployeeLinkUrl() {
     let employeeUrl = '';
-    const base = window.location.origin || `${window.location.protocol}//${window.location.host}`;
-    employeeUrl = `${base}/?mode=staff`;
+    const current = new URL(window.location.href);
+    const pagePath = current.pathname || '/';
+    employeeUrl = `${current.origin}${pagePath}?mode=staff`;
     const pin = normalizeSyncPin(state.db.sync.currentSyncPin || '');
     if (pin) employeeUrl += `&pin=${encodeURIComponent(pin)}`;
     return employeeUrl;
