@@ -3907,7 +3907,12 @@
           height: 110
         });
       } else {
-        qrArea.textContent = 'QR ไม่พร้อม';
+        qrArea.innerHTML = `
+          <div class="text-center px-2">
+            <div class="text-[9px] text-gray-500 font-black mb-1">สร้าง QR ไม่สำเร็จ</div>
+            <a href="${escapeHtml(employeeUrl)}" class="text-[9px] font-black text-blue-600 underline break-all">เปิดลิงก์แทน</a>
+          </div>
+        `;
       }
     }
     renderOnlineClientsUi();
