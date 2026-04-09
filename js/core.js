@@ -98,6 +98,7 @@
     activeTab: 'customer',
     activeManageSub: 'dash',
     activeDashSub: 'history',
+    activeMenuManageSub: 'menu',
     activeUnitId: null,
     gridZoom: 2,
     customerGridCollapsed: true,
@@ -404,6 +405,10 @@
   }
   function normalizeSyncPin(pin = '') {
     return String(pin || '').replace(/\D/g, '').slice(0, 6);
+  }
+  function readSyncPinFromUrl() {
+    const params = new URLSearchParams(window.location.search || '');
+    return normalizeSyncPin(params.get('pin') || params.get('syncPin') || '');
   }
   function ensureClientId() {
     let clientId = localStorage.getItem('FAKDU_CLIENT_ID') || '';
@@ -1859,7 +1864,11 @@
     element?.classList?.add('active', 'bg-white', 'shadow-sm', 'text-gray-800');
     if (qs('sub-dash')) qs('sub-dash').classList.toggle('hidden', name !== 'dash');
     if (qs('sub-menu')) qs('sub-menu').classList.toggle('hidden', name !== 'menu');
-    if (name === 'menu') renderAdminLists();
+    if (name === 'menu') {
+      renderAdminLists();
+      const activeMenuBtn = qs(state.activeMenuManageSub === 'redeem' ? 'menu-manage-tab-redeem' : 'menu-manage-tab-menu');
+      switchMenuManageTab(state.activeMenuManageSub, activeMenuBtn);
+    }
     if (name === 'dash') renderAnalytics();
   }
 
@@ -3887,24 +3896,18 @@
   }
 
   function updateSyncUi() {
-    if (qs('display-sync-key')) qs('display-sync-key').textContent = state.db.sync.currentSyncPin || '------';
     const qrArea = qs('sync-qr-area');
     if (qrArea) {
       qrArea.innerHTML = '';
+      const employeeUrl = buildEmployeeLinkUrl();
       if (typeof QRCode === 'function') {
         new QRCode(qrArea, {
-          text: JSON.stringify({
-            shopId: state.db.shopId,
-            pin: state.db.sync.currentSyncPin,
-            shopName: state.db.shopName,
-            syncVersion: Number(state.db.sync.syncVersion || 1),
-            version: APP_VERSION
-          }),
-          width: 72,
-          height: 72
+          text: employeeUrl,
+          width: 110,
+          height: 110
         });
       } else {
-        qrArea.textContent = state.db.sync.currentSyncPin || 'PIN';
+        qrArea.textContent = 'QR ไม่พร้อม';
       }
     }
     renderOnlineClientsUi();
@@ -4156,7 +4159,7 @@
   }
 
   async function submitClientAccessRequest() {
-    const rawPin = qs('manual-pin')?.value?.trim() || '';
+    const rawPin = qs('manual-pin')?.value?.trim() || readSyncPinFromUrl();
     const pin = normalizeSyncPin(rawPin);
     const accessMode = getSelectedClientAccessMode();
     localStorage.setItem('FAKDU_CLIENT_ACCESS_MODE', accessMode);
@@ -4429,10 +4432,9 @@
   }
 
   function syncModalPinToHiddenInput() {
-    const visiblePinInput = qs('manual-pin-visible');
     const hiddenPinInput = qs('manual-pin');
-    if (!visiblePinInput || !hiddenPinInput) return '';
-    hiddenPinInput.value = String(visiblePinInput.value || '').trim();
+    if (!hiddenPinInput) return '';
+    hiddenPinInput.value = readSyncPinFromUrl();
     return hiddenPinInput.value;
   }
 
@@ -4450,6 +4452,15 @@
     return submitClientAccessRequest();
   }
 
+  function buildEmployeeLinkUrl() {
+    let employeeUrl = '';
+    const base = window.location.origin || `${window.location.protocol}//${window.location.host}`;
+    employeeUrl = `${base}/?mode=staff`;
+    const pin = normalizeSyncPin(state.db.sync.currentSyncPin || '');
+    if (pin) employeeUrl += `&pin=${encodeURIComponent(pin)}`;
+    return employeeUrl;
+  }
+
   async function copyEmployeeLink() {
     let employeeUrl = '';
     try {
@@ -4461,8 +4472,14 @@
     } catch (_) {}
 
     if (!employeeUrl) {
-      const base = window.location.origin || `${window.location.protocol}//${window.location.host}`;
-      employeeUrl = `${base}/?mode=staff`;
+      employeeUrl = buildEmployeeLinkUrl();
+    } else {
+      const pin = normalizeSyncPin(state.db.sync.currentSyncPin || '');
+      if (pin) {
+        const parsed = new URL(employeeUrl, window.location.origin);
+        parsed.searchParams.set('pin', pin);
+        employeeUrl = parsed.toString();
+      }
     }
 
     const copied = await copyTextTwoLayer(employeeUrl);
@@ -4512,6 +4529,23 @@
     updateCartTotal();
     if (qs('display-hwid')) qs('display-hwid').textContent = state.db.shopId || '-';
   }
+
+  function switchMenuManageTab(id, btn) {
+    const tabId = id === 'redeem' ? 'redeem' : 'menu';
+    state.activeMenuManageSub = tabId;
+    const menuPane = qs('menu-manage-pane-menu');
+    const redeemPane = qs('menu-manage-pane-redeem');
+    if (menuPane) menuPane.classList.toggle('hidden', tabId !== 'menu');
+    if (redeemPane) redeemPane.classList.toggle('hidden', tabId !== 'redeem');
+    document.querySelectorAll('#sub-menu #menu-manage-tab-menu, #sub-menu #menu-manage-tab-redeem').forEach((tab) => {
+      tab.classList.remove('bg-white', 'text-gray-800', 'shadow-sm');
+      tab.classList.add('text-gray-500');
+    });
+    if (btn) {
+      btn.classList.remove('text-gray-500');
+      btn.classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+    }
+  }
   //* render close
 
   //* init open
@@ -4550,6 +4584,8 @@
       bindGridZoomControls();
       renderAll();
       applyStaffModeUi();
+      const urlPin = readSyncPinFromUrl();
+      if (qs('manual-pin') && urlPin) qs('manual-pin').value = urlPin;
       if (IS_CLIENT_NODE) {
         const profile = getClientProfile();
         if (qs('sys-client-name')) qs('sys-client-name').value = profile.profileName;
@@ -4598,6 +4634,9 @@
       renderAnalytics();
       startLiveTimers();
       switchTab('customer', qs('tab-customer'));
+      if (!IS_CLIENT_NODE && isRestrictedStaffMode() && urlPin && !localStorage.getItem(LS_PENDING_PAIR_REQUEST_ID)) {
+        submitClientAccessRequestFromModal();
+      }
       if (!IS_CLIENT_NODE || isClientSessionValid()) {
         showToast('FAKDU พร้อมใช้งาน', 'success');
       }
@@ -4667,7 +4706,7 @@
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
-    if (event.key === 'Enter' && (target.id === 'manual-pin' || target.id === 'manual-pin-visible')) {
+    if (event.key === 'Enter' && target.id === 'manual-pin') {
       event.preventDefault();
       submitClientAccessRequestFromModal();
     }
@@ -4706,6 +4745,7 @@
     toggleCheckoutMemberSection,
     markCheckoutMemberDirty,
     switchManageSub,
+    switchMenuManageTab,
     switchDashTab,
     calculateCustomSalesRealtime,
     clearSales,
