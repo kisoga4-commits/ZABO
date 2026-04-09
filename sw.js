@@ -1,6 +1,6 @@
 // sw.js - Service Worker (FAKDU v9.46)
 
-const SW_VERSION = '11.49.5';
+const SW_VERSION = '11.49.6';
 const CACHE_NAME = `fakdu-cache-v${SW_VERSION}`;
 const META_CACHE_NAME = `fakdu-cache-meta-v${SW_VERSION}`;
 const CACHE_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
@@ -80,6 +80,12 @@ self.addEventListener('activate', (event) => {
     })
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event?.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {
