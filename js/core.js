@@ -524,26 +524,27 @@
   function isRestrictedStaffMode() {
     return !IS_CLIENT_NODE && state.isStaffMode;
   }
-  function normalizeClientAccessMode(value, fallback = 'customer') {
+  function normalizeClientAccessMode(value, fallback = 'both') {
     const mode = String(value || '').trim().toLowerCase();
+    if (mode === 'both' || mode === 'all' || mode === 'staff') return 'both';
     if (mode === 'shop' || mode === 'checkout' || mode === 'bill') return 'shop';
     if (mode === 'customer' || mode === 'order') return 'customer';
     return fallback;
   }
   function getSelectedClientAccessMode() {
-    return normalizeClientAccessMode(qs('client-access-mode')?.value || 'customer', 'customer');
+    return normalizeClientAccessMode('both', 'both');
   }
   function getClientSessionAccessMode() {
     const session = getStoredClientSession();
-    return normalizeClientAccessMode(session?.accessMode || 'customer', 'customer');
+    return normalizeClientAccessMode(session?.accessMode || 'both', 'both');
   }
   function applyClientAccessModeUi() {
     if (!IS_CLIENT_NODE) return;
     const mode = getClientSessionAccessMode();
     const customerTab = qs('tab-customer');
     const shopTab = qs('tab-shop');
-    if (customerTab) customerTab.classList.toggle('hidden', mode === 'shop');
-    if (shopTab) shopTab.classList.toggle('hidden', mode === 'customer');
+    if (customerTab) customerTab.classList.toggle('hidden', false);
+    if (shopTab) shopTab.classList.toggle('hidden', false);
     if (mode === 'shop' && state.activeTab === 'customer') switchTab('shop', shopTab);
     if (mode === 'customer' && state.activeTab === 'shop') switchTab('customer', customerTab);
   }
@@ -3101,7 +3102,7 @@
         profileName: payload.profileName || getClientProfile().profileName,
         clientSessionToken: payload.clientSessionToken || '',
         syncVersion: Number(payload.syncVersion || 1),
-        accessMode: normalizeClientAccessMode(payload.accessMode || 'customer')
+        accessMode: normalizeClientAccessMode(payload.accessMode || 'both')
       };
       await persistClientSession(sessionPayload);
       state.db.sync.clientSession = {
@@ -3109,7 +3110,7 @@
         clientId,
         clientSessionToken: sessionPayload.clientSessionToken || '',
         syncVersion: Number(sessionPayload.syncVersion || 1),
-        accessMode: normalizeClientAccessMode(sessionPayload.accessMode || 'customer')
+        accessMode: normalizeClientAccessMode(sessionPayload.accessMode || 'both')
       };
       applyClientAccessModeUi();
       if (sessionPayload.shopId) {
@@ -3215,7 +3216,7 @@
     const session = getStoredClientSession();
     if (!session) return false;
     if (!session.clientSessionToken || !session.clientId || !session.shopId) return false;
-    session.accessMode = normalizeClientAccessMode(session.accessMode || 'customer');
+    session.accessMode = normalizeClientAccessMode(session.accessMode || 'both');
     return Number(session.syncVersion || 0) === Number(state.db.sync.syncVersion || session.syncVersion || 1);
   }
 
@@ -3487,7 +3488,7 @@
       requestId: String(client?.requestId || ''),
       shopId: String(client?.shopId || ''),
       syncVersion: Number(client?.syncVersion || state.db.sync.syncVersion || 1),
-      requestedMode: normalizeClientAccessMode(client?.accessMode || client?.requestedMode || 'customer'),
+      requestedMode: normalizeClientAccessMode(client?.accessMode || client?.requestedMode || 'both'),
       status: String(client?.status || 'pending').toLowerCase(),
       requestedAt: Number(client?.created_at || client?.requestedAt || Date.now())
     };
@@ -3526,7 +3527,7 @@
       existing.pin = normalized.pin || existing.pin || '';
       existing.requestId = normalized.requestId || existing.requestId || '';
       existing.syncVersion = normalized.syncVersion || existing.syncVersion || activeVersion;
-      existing.requestedMode = normalizeClientAccessMode(normalized.requestedMode || existing.requestedMode || 'customer');
+      existing.requestedMode = normalizeClientAccessMode(normalized.requestedMode || existing.requestedMode || 'both');
       existing.status = 'pending';
     } else {
       state.db.sync.approvals.unshift({
@@ -3537,7 +3538,7 @@
         pin: normalized.pin || activePin,
         requestId: normalized.requestId || '',
         syncVersion: normalized.syncVersion || activeVersion,
-        requestedMode: normalizeClientAccessMode(normalized.requestedMode || 'customer'),
+        requestedMode: normalizeClientAccessMode(normalized.requestedMode || 'both'),
         requestedAt: normalized.requestedAt || Date.now(),
         status: 'pending'
       });
@@ -3554,7 +3555,7 @@
         pin: normalized.pin || activePin,
         requestId: normalized.requestId || '',
         syncVersion: normalized.syncVersion || activeVersion,
-        accessMode: normalizeClientAccessMode(normalized.requestedMode || 'customer'),
+        accessMode: normalizeClientAccessMode(normalized.requestedMode || 'both'),
         requestedAt: Date.now()
       }).catch(() => {});
     }
@@ -3724,11 +3725,10 @@
         </div>
         <div class="flex-1 min-w-0">
           <div class="font-black text-gray-800 truncate">${escapeHtml(item.profileName || item.name || item.clientId)}</div>
-          <div class="text-[10px] text-gray-400 font-bold">PIN ${escapeHtml(item.pin || '-')} • ${thaiDate(item.requestedAt)} • โหมด ${normalizeClientAccessMode(item.requestedMode || 'customer') === 'shop' ? 'เช็คบิล' : 'ลูกค้า'}</div>
+          <div class="text-[10px] text-gray-400 font-bold">PIN ${escapeHtml(item.pin || '-')} • ${thaiDate(item.requestedAt)} • โหมดใช้งาน ลูกค้า + เช็คบิล</div>
         </div>
         <div class="flex gap-2 shrink-0">
-          <button onclick="approveClientWithMode('${item.clientId}', 'customer')" class="px-3 py-2 rounded-xl bg-blue-500 text-white text-xs font-black">โหมดลูกค้า</button>
-          <button onclick="approveClientWithMode('${item.clientId}', 'shop')" class="px-3 py-2 rounded-xl bg-emerald-500 text-white text-xs font-black">โหมดเช็คบิล</button>
+          <button onclick="approveClientWithMode('${item.clientId}', 'both')" class="px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-black">อนุมัติ (2 โหมด)</button>
           <button onclick="rejectClient('${item.clientId}')" class="px-3 py-2 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs font-black">ปฏิเสธ</button>
         </div>
       </div>
@@ -3757,7 +3757,7 @@
     const item = pending[0];
     const label = item.profileName || item.name || item.clientId || 'อุปกรณ์เสริม';
     nameEl.textContent = label;
-    metaEl.textContent = `PIN ${item.pin || '-'} • ${thaiDate(item.requestedAt || Date.now())} • โหมด ${normalizeClientAccessMode(item.requestedMode || 'customer') === 'shop' ? 'เช็คบิล' : 'ลูกค้า'}`;
+    metaEl.textContent = `PIN ${item.pin || '-'} • ${thaiDate(item.requestedAt || Date.now())} • โหมดใช้งาน ลูกค้า + เช็คบิล`;
     avatarEl.innerHTML = item.avatar
       ? `<img src="${item.avatar}" class="w-full h-full object-cover">`
       : `<span class="font-black text-gray-600 text-xl">${escapeHtml((label || 'C').slice(0, 1).toUpperCase())}</span>`;
@@ -3766,7 +3766,7 @@
   function approveNextClientRequest() {
     const item = Array.isArray(state.db.sync.approvals) ? state.db.sync.approvals[0] : null;
     if (!item?.clientId) return;
-    approveClientWithMode(item.clientId, item.requestedMode || 'customer');
+    approveClientWithMode(item.clientId, 'both');
   }
 
   function rejectNextClientRequest() {
@@ -3810,7 +3810,7 @@
 
     const approval = state.db.sync.approvals.find((row) => row.clientId === clientId);
     if (!approval) return;
-    const approvedMode = normalizeClientAccessMode(forcedMode || approval.requestedMode || 'customer', 'customer');
+    const approvedMode = normalizeClientAccessMode(forcedMode || approval.requestedMode || 'both', 'both');
 
     console.log('[FAKDU][SYNC] master approve request', { clientId, approvedMode, approval });
 
@@ -3864,7 +3864,7 @@
         clientId: row.clientId,
         profileName: row.profileName || row.name || row.clientId,
         sessionSyncVersion: Number(row.sessionSyncVersion || state.db.sync.syncVersion || 1),
-        accessMode: normalizeClientAccessMode(row.accessMode || 'customer')
+        accessMode: normalizeClientAccessMode(row.accessMode || 'both')
       }));
 
     const api = resolveFirebaseSyncApi();
@@ -3912,7 +3912,7 @@
 
     renderOnlineClientsUi();
     saveDb({ render: false, sync: true });
-    showToast(`อนุมัติอุปกรณ์เสริมแล้ว (โหมด${approvedMode === 'shop' ? 'เช็คบิล' : 'ลูกค้า'})`, 'success');
+    showToast('อนุมัติอุปกรณ์เสริมแล้ว (ใช้งานได้ 2 โหมด: ลูกค้า + เช็คบิล)', 'success');
   }
 
   function rejectClient(clientId) {
@@ -4130,7 +4130,7 @@
         try {
           const data = JSON.parse(decodedText);
           parsedPin = normalizeSyncPin(data.pin || '');
-          const parsedMode = normalizeClientAccessMode(data.accessMode || data.mode || 'customer');
+          const parsedMode = normalizeClientAccessMode(data.accessMode || data.mode || 'both');
           if (parsedPin && qs('manual-pin')) qs('manual-pin').value = parsedPin;
           if (qs('client-access-mode')) qs('client-access-mode').value = parsedMode;
         } catch (_) {
@@ -4584,7 +4584,7 @@
         if (qs('client-device-name')) qs('client-device-name').textContent = profile.profileName;
         if (qs('client-avatar') && profile.avatar) qs('client-avatar').src = profile.avatar;
         if (qs('client-access-mode')) {
-          qs('client-access-mode').value = normalizeClientAccessMode(localStorage.getItem('FAKDU_CLIENT_ACCESS_MODE') || 'customer');
+          qs('client-access-mode').value = normalizeClientAccessMode(localStorage.getItem('FAKDU_CLIENT_ACCESS_MODE') || 'both');
         }
 
         const session = getStoredClientSession();
@@ -4593,7 +4593,7 @@
           clientId: session.clientId || profile.clientId,
           clientSessionToken: session.clientSessionToken || '',
           syncVersion: Number(session.syncVersion || state.db.sync.syncVersion || 1),
-          accessMode: normalizeClientAccessMode(session.accessMode || 'customer')
+          accessMode: normalizeClientAccessMode(session.accessMode || 'both')
         } : null;
         applyClientAccessModeUi();
         if (isClientSessionValid()) {

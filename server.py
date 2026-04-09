@@ -34,7 +34,7 @@ class FakduHandler(SimpleHTTPRequestHandler):
             payload = {
                 "ok": True,
                 "employee_url": self._staff_url(),
-                "hint": "เปิดลิงก์นี้บนเครื่องพนักงานเพื่อเข้าโหมดเฉพาะลูกค้า/เช็คบิล",
+                "hint": "เปิดลิงก์นี้บนเครื่องพนักงานเพื่อเข้าเว็บและใช้งาน 2 โหมด (ลูกค้า + เช็คบิล)",
             }
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(HTTPStatus.OK)
@@ -63,7 +63,7 @@ class FakduHandler(SimpleHTTPRequestHandler):
 </head><body>
   <div class=\"card\">
     <h2>QR สำหรับเครื่องพนักงาน</h2>
-    <p>เปิดหน้านี้บนมือถือ แล้วให้เครื่องพนักงานสแกน QR เพื่อเข้าโหมดพนักงาน (เห็นเฉพาะ: ลูกค้า, เช็คบิล)</p>
+    <p>เปิดหน้านี้บนมือถือ แล้วให้เครื่องพนักงานสแกน QR เพื่อเข้าเว็บเครื่องพนักงาน (ใช้งานได้ทั้ง 2 โหมด: ลูกค้า + เช็คบิล)</p>
     <div class=\"qr-wrap\"><img src=\"{qr_src}\" alt=\"Employee QR\" /></div>
     <code>{qr_text}</code>
   </div>

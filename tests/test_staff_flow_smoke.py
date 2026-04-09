@@ -32,13 +32,12 @@ class StaffFlowSmokeTest(unittest.TestCase):
         conn.close()
         return res.status, headers, body
 
-    def test_home_contains_two_staff_access_modes(self):
+    def test_home_contains_dual_staff_access_mode(self):
         status, _, body = self.request("GET", "/")
         self.assertEqual(status, 200)
         html = body.decode("utf-8", errors="ignore")
         self.assertIn('id="client-access-mode"', html)
-        self.assertIn('option value="customer"', html)
-        self.assertIn('option value="shop"', html)
+        self.assertIn('value="both"', html)
 
     def test_employee_endpoint_redirects_to_staff_mode(self):
         status, headers, _ = self.request("GET", "/employee")
