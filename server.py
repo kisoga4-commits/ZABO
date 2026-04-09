@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import queue
 import socket
+import threading
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +19,41 @@ LOCAL_DB_BACKUP_DIR = Path(__file__).resolve().with_name("fakdu.localdb.backups"
 LOCAL_DB_BACKUP_PREFIX = "fakdu.localdb."
 LOCAL_DB_BACKUP_SUFFIX = ".json"
 LOCAL_DB_RETENTION_DAYS = 30
+
+
+class LocalDbEventBus:
+    def __init__(self) -> None:
+        self._listeners: set[queue.Queue] = set()
+        self._lock = threading.Lock()
+
+    def subscribe(self) -> queue.Queue:
+        inbox: queue.Queue = queue.Queue(maxsize=8)
+        with self._lock:
+            self._listeners.add(inbox)
+        return inbox
+
+    def unsubscribe(self, inbox: queue.Queue) -> None:
+        with self._lock:
+            self._listeners.discard(inbox)
+
+    def publish(self, payload: dict) -> None:
+        with self._lock:
+            listeners = list(self._listeners)
+        for inbox in listeners:
+            try:
+                inbox.put_nowait(payload)
+            except queue.Full:
+                try:
+                    inbox.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    inbox.put_nowait(payload)
+                except queue.Full:
+                    continue
+
+
+LOCAL_DB_EVENT_BUS = LocalDbEventBus()
 
 
 class FakduHandler(SimpleHTTPRequestHandler):
@@ -119,9 +156,33 @@ class FakduHandler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if path == "/api/local-db-events":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            self.wfile.flush()
+
+            inbox = LOCAL_DB_EVENT_BUS.subscribe()
+            try:
+                while True:
+                    try:
+                        payload = inbox.get(timeout=20)
+                        msg = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                    except queue.Empty:
+                        msg = ": keep-alive\n\n"
+                    self.wfile.write(msg.encode("utf-8"))
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                LOCAL_DB_EVENT_BUS.unsubscribe(inbox)
+            return
+
         if path == "/employee-qr":
             qr_text = self._staff_url()
-            qr_src = f"https://api.qrserver.com/v1/create-qr-code/?size=280x280&data={quote(qr_text, safe='')}"
+            qr_encoded = quote(qr_text, safe="")
             page = f"""<!doctype html>
 <html lang=\"th\"><head>
   <meta charset=\"utf-8\" />
@@ -130,16 +191,17 @@ class FakduHandler(SimpleHTTPRequestHandler):
   <style>
     body {{ font-family: system-ui, sans-serif; margin: 0; padding: 24px; background:#f8fafc; color:#0f172a; }}
     .card {{ max-width: 560px; margin: 0 auto; background:#fff; border-radius: 16px; padding: 20px; box-shadow: 0 8px 28px rgba(15,23,42,.1); }}
-    .qr-wrap {{ display:flex; justify-content:center; margin: 20px 0; }}
-    .qr-wrap img {{ width: 280px; height: 280px; border-radius: 12px; border: 1px solid #e2e8f0; }}
+    .hint {{ font-size: 14px; color:#475569; line-height:1.6; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; }}
+    .btn {{ display:inline-block; margin-top:14px; background:#0f766e; color:#fff; text-decoration:none; font-weight:700; padding:10px 14px; border-radius:10px; }}
     code {{ display:block; background:#f1f5f9; padding:10px; border-radius:10px; word-break:break-all; }}
   </style>
 </head><body>
   <div class=\"card\">
-    <h2>QR สำหรับเครื่องพนักงาน</h2>
-    <p>เปิดหน้านี้บนมือถือ แล้วให้เครื่องพนักงานสแกน QR เพื่อเข้าเว็บเครื่องพนักงาน (ใช้งานได้ทั้ง 2 โหมด: ลูกค้า + เช็คบิล)</p>
-    <div class=\"qr-wrap\"><img src=\"{qr_src}\" alt=\"Employee QR\" /></div>
+    <h2>QR สำหรับเครื่องพนักงาน (LAN/Web)</h2>
+    <p class=\"hint\">โหมด LAN จะไม่พึ่งบริการ QR ภายนอก เพื่อให้ใช้งานได้แม้เน็ตไม่เสถียร<br>ให้เปิดลิงก์ด้านล่างจากมือถือพนักงานได้ทันที</p>
     <code>{qr_text}</code>
+    <small style=\"display:block;margin-top:8px;color:#64748b\">encoded: {qr_encoded}</small>
+    <a class=\"btn\" href=\"{qr_text}\">เปิดลิงก์เครื่องพนักงาน</a>
   </div>
 </body></html>"""
             body = page.encode("utf-8")
@@ -180,6 +242,8 @@ class FakduHandler(SimpleHTTPRequestHandler):
         safe_payload = {
             "savedAt": payload.get("savedAt"),
             "appVersion": payload.get("appVersion"),
+            "sourceDeviceId": payload.get("sourceDeviceId"),
+            "sourceMode": payload.get("sourceMode"),
             "db": data
         }
         LOCAL_DB_FILE.write_text(json.dumps(safe_payload, ensure_ascii=False), encoding="utf-8")
@@ -188,6 +252,13 @@ class FakduHandler(SimpleHTTPRequestHandler):
         snapshot_file = LOCAL_DB_BACKUP_DIR / f"{LOCAL_DB_BACKUP_PREFIX}{stamp}{LOCAL_DB_BACKUP_SUFFIX}"
         snapshot_file.write_text(json.dumps(safe_payload, ensure_ascii=False), encoding="utf-8")
         self._prune_old_local_db_files()
+        LOCAL_DB_EVENT_BUS.publish({
+            "type": "LOCAL_DB_UPDATED",
+            "savedAt": safe_payload.get("savedAt"),
+            "appVersion": safe_payload.get("appVersion"),
+            "sourceDeviceId": safe_payload.get("sourceDeviceId"),
+            "sourceMode": safe_payload.get("sourceMode"),
+        })
         body = json.dumps({"ok": True, "saved": True}, ensure_ascii=False).encode("utf-8")
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json; charset=utf-8")

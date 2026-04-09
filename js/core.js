@@ -138,7 +138,12 @@
     appliedOpsPersistTimer: null,
     employeeLinkFromServer: '',
     localServerBackupTimer: null,
-    lastLocalServerBackupAt: 0
+    localServerEventSource: null,
+    localServerEventReconnectTimer: null,
+    lastLocalServerBackupAt: 0,
+    lastLocalServerSeenSavedAt: 0,
+    lastLocalServerSyncToastAt: 0,
+    isApplyingLocalServerSnapshot: false
   };
   const IS_CLIENT_NODE = false;
   //* constants close
@@ -574,9 +579,6 @@
     nav?.classList.toggle('staff-only-nav', restricted);
     if (manageTab) manageTab.classList.toggle('hidden', restricted);
     if (systemTab) systemTab.classList.toggle('hidden', restricted);
-    const staffConnectPanel = qs('staff-connect-panel');
-    if (staffConnectPanel) staffConnectPanel.classList.toggle('hidden', !restricted);
-
     if (restricted && (state.activeTab === 'manage' || state.activeTab === 'system')) {
       switchTab('customer', qs('tab-customer'));
     }
@@ -868,10 +870,70 @@
       if (!payload || payload.ok === false) return null;
       const candidate = payload?.data?.db ?? payload?.data;
       if (!candidate || typeof candidate !== 'object') return null;
-      return candidate;
+      const savedAt = Number(payload?.data?.savedAt || payload?.savedAt || 0);
+      return {
+        db: candidate,
+        savedAt: Number.isFinite(savedAt) ? savedAt : 0
+      };
     } catch (_) {
       return null;
     }
+  }
+
+  async function pullDbFromLocalServerRealtime() {
+    if (IS_CLIENT_NODE || state.isApplyingLocalServerSnapshot) return;
+    const snapshot = await readDbFromLocalServerBackup();
+    if (!snapshot?.db) return;
+    const savedAt = Number(snapshot.savedAt || 0);
+    if (!savedAt || savedAt <= Number(state.lastLocalServerSeenSavedAt || 0)) return;
+    state.lastLocalServerSeenSavedAt = savedAt;
+    const normalizedRemote = normalizeDb(snapshot.db);
+    if (JSON.stringify(normalizedRemote) === JSON.stringify(state.db)) return;
+    state.isApplyingLocalServerSnapshot = true;
+    try {
+      state.db = normalizedRemote;
+      await resolveDbApi().save(state.db);
+      renderAfterStateChange();
+      const nowTs = Date.now();
+      if ((nowTs - state.lastLocalServerSyncToastAt) > 5000) {
+        showToast('ซิงก์ข้อมูลจากอีกเครื่องแล้ว', 'success');
+        state.lastLocalServerSyncToastAt = nowTs;
+      }
+    } catch (_) {
+      // ignore realtime sync errors and keep current state
+    } finally {
+      state.isApplyingLocalServerSnapshot = false;
+    }
+  }
+
+  function startLocalServerRealtimeSync() {
+    if (IS_CLIENT_NODE) return;
+    pullDbFromLocalServerRealtime();
+    if (typeof EventSource !== 'function') return;
+    if (state.localServerEventSource) return;
+    try {
+      const eventSource = new EventSource('/api/local-db-events');
+      state.localServerEventSource = eventSource;
+      eventSource.onmessage = (event) => {
+        let payload = null;
+        try { payload = JSON.parse(event?.data || '{}'); } catch (_) {}
+        const remoteSavedAt = Number(payload?.savedAt || 0);
+        const sourceDeviceId = String(payload?.sourceDeviceId || '');
+        if (remoteSavedAt > Number(state.lastLocalServerSeenSavedAt || 0)) {
+          state.lastLocalServerSeenSavedAt = remoteSavedAt;
+        }
+        if (sourceDeviceId && sourceDeviceId === state.hwid) return;
+        pullDbFromLocalServerRealtime();
+      };
+      eventSource.onerror = () => {
+        try { eventSource.close(); } catch (_) {}
+        if (state.localServerEventSource === eventSource) state.localServerEventSource = null;
+        clearTimeout(state.localServerEventReconnectTimer);
+        state.localServerEventReconnectTimer = setTimeout(() => {
+          startLocalServerRealtimeSync();
+        }, 2500);
+      };
+    } catch (_) {}
   }
 
   function scheduleLocalServerBackup(force = false) {
@@ -887,12 +949,34 @@
           body: JSON.stringify({
             savedAt: Date.now(),
             appVersion: APP_VERSION,
+            sourceDeviceId: state.hwid || '',
+            sourceMode: state.isStaffMode ? 'staff' : 'master',
             db: state.db
           })
         });
-        if (response.ok) state.lastLocalServerBackupAt = Date.now();
+        if (response.ok) {
+          state.lastLocalServerBackupAt = Date.now();
+          state.lastLocalServerSeenSavedAt = state.lastLocalServerBackupAt;
+        }
       } catch (_) {}
     }, force ? 0 : 200);
+  }
+
+  function renderAfterStateChange() {
+    applyTheme();
+    applyTrialUiGuards();
+    updateMasterConnectionUi();
+    renderOnlineClientsUi();
+    if (state.activeTab === 'customer') renderCustomerGrid();
+    else if (state.activeTab === 'shop') renderShopQueue();
+    else if (state.activeTab === 'manage') {
+      renderAnalytics();
+      renderAdminLists();
+    } else if (state.activeTab === 'system') {
+      renderSystemPanels();
+    }
+    updateCartTotal();
+    if (qs('display-hwid')) qs('display-hwid').textContent = state.db.shopId || '-';
   }
 
   async function saveDb({ render = true } = {}) {
@@ -902,7 +986,7 @@
       runDbMaintenanceIfNeeded();
       await dbApi.save(state.db);
       scheduleLocalServerBackup();
-      if (render) renderAll();
+      if (render) renderAfterStateChange();
 
     }, 30);
   }
@@ -1783,18 +1867,6 @@
       return;
     }
 
-    if (payload && navigator.onLine) {
-      const onlineQr = document.createElement('img');
-      onlineQr.className = 'w-full h-full object-cover';
-      onlineQr.alt = 'PromptPay QR';
-      onlineQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payload)}`;
-      onlineQr.onerror = () => {
-        genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ไม่สามารถโหลด QR ออนไลน์ได้</div>';
-      };
-      genArea.appendChild(onlineQr);
-      status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic/Online)`;
-      return;
-    }
     if (state.db.qrOffline) {
       offlineImg.src = state.db.qrOffline;
       offlineImg.classList.remove('hidden');
@@ -1803,8 +1875,10 @@
         : 'Dynamic ไม่พร้อม ใช้ QR ภาพนิ่งแทน';
       return;
     }
-    genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่สามารถสร้าง QR Dynamic ได้<br>ตรวจสอบพร้อมเพย์/อินเทอร์เน็ต</div>';
-    status.textContent = state.db.ppay && !navigator.onLine ? 'โหมด Dynamic ต้องใช้อินเทอร์เน็ตสำหรับ fallback' : 'ไม่มี QR พร้อมใช้งาน';
+    genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่สามารถสร้าง QR Dynamic ได้<br>กรุณาอัปโหลด QR Static ในหน้าระบบเพื่อใช้งานผ่าน LAN</div>';
+    status.textContent = typeof QRCode !== 'function'
+      ? 'ไม่พบตัวสร้าง QR ในเว็บ (QRCode lib) กรุณาอัปโหลด QR Static'
+      : 'ไม่มี QR พร้อมใช้งาน';
   }
 
   function deleteOrderItem(index) {
@@ -2565,6 +2639,7 @@
     state.db.bgColor = qs('sys-bg')?.value || '#f8fafc';
     state.db.bank = qs('sys-bank')?.value?.trim() || '';
     state.db.ppay = qs('sys-ppay')?.value?.trim() || '';
+    setPromptPayDynamicEnabled(Boolean(qs('sys-promptpay-dynamic')?.checked));
     if (!state.db.shopId) state.db.shopId = makeShopId();
     logOperation('SAVE_SYSTEM_SETTINGS', { shopName: state.db.shopName });
     applyTheme();
@@ -4592,7 +4667,8 @@
   function startLiveTimers() {
     clearInterval(state.liveTick);
     state.liveTick = setInterval(() => {
-      document.querySelectorAll('.admin-timer').forEach((el) => {
+      if (document.hidden) return;
+      document.querySelectorAll('.screen.active .admin-timer').forEach((el) => {
         const start = Number(el.getAttribute('data-start') || 0);
         if (start) el.textContent = formatDurationFrom(start);
       });
@@ -4667,8 +4743,9 @@
       state.db = normalizeDb(raw);
       if (!raw && !IS_CLIENT_NODE) {
         const recovered = await readDbFromLocalServerBackup();
-        if (recovered) {
-          state.db = normalizeDb(recovered);
+        if (recovered?.db) {
+          state.db = normalizeDb(recovered.db);
+          state.lastLocalServerSeenSavedAt = Number(recovered.savedAt || 0);
           await resolveDbApi().save(state.db);
           showToast('กู้ข้อมูลจากไฟล์ในเครื่องสำเร็จ', 'success');
         }
@@ -4685,6 +4762,9 @@
       applyTrialUiGuards();
       await bindSyncChannel();
       startSyncPollingFallback();
+      startLocalServerRealtimeSync();
+      window.addEventListener('focus', pullDbFromLocalServerRealtime);
+      window.addEventListener('online', pullDbFromLocalServerRealtime);
       loadSettingsToForm();
       applyTheme();
       updateSyncUi();
