@@ -459,6 +459,7 @@
       id: item.id || `ITM-${Date.now()}`,
       name: item.name || '-',
       price: Number(item.price || 0),
+      redeemPoints: Math.max(0, Number(item.redeemPoints || 0)),
       addons: Array.isArray(item.addons) ? clone(item.addons) : [],
       hasImage: Boolean(item.img),
       imageVersion: Number(item.imageVersion || 0)
@@ -483,6 +484,7 @@
         bank: state.db.bank || '',
         ppay: state.db.ppay || '',
         qrOffline: state.db.qrOffline || '',
+        promptPayDynamic: isPromptPayDynamicEnabled(),
         soundEnabled: Boolean(state.db.soundEnabled)
       },
       syncSession: {
@@ -498,7 +500,11 @@
     return `MSG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
   }
   function resolveFirebaseSyncApi() {
-    // LAN-first build: disabled cloud adapter path to reduce runtime overhead.
+    const provider = window.FakduFirebaseSync;
+    if (provider && typeof provider.resolveApi === 'function') {
+      const api = provider.resolveApi();
+      if (api && typeof api === 'object') return api;
+    }
     return null;
   }
   function getClientStatus(client) {
@@ -1499,18 +1505,18 @@
     const list = qs('review-list');
     if (list) {
       list.innerHTML = cart.map((row, index) => `
-        <div class="py-3">
-          <div class="flex items-start justify-between gap-3">
+        <div class="py-1.5">
+          <div class="flex items-center gap-2">
             <div class="flex-1 min-w-0">
-              <div class="font-black text-gray-800 leading-tight break-words">${escapeHtml(row.name)}</div>
-              <div class="text-[11px] text-gray-500 font-bold mt-1">฿${formatMoney(row.price)} / รายการ</div>
+              <div class="font-black text-sm text-gray-800 leading-tight truncate">${escapeHtml(row.name)}</div>
+              <div class="text-[10px] text-gray-500 font-bold">฿${formatMoney(row.price)} / รายการ</div>
             </div>
-            <div class="font-black theme-text text-right shrink-0">฿${formatMoney(row.total)}</div>
-          </div>
-          <div class="mt-3 inline-flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-2 py-1">
-            <button onclick="editCartItem(${index}, -1)" class="w-8 h-8 rounded-lg bg-white border border-gray-200 font-black text-gray-700">−</button>
-            <span class="font-black text-base min-w-[24px] text-center">${row.qty}</span>
-            <button onclick="editCartItem(${index}, 1)" class="w-8 h-8 rounded-lg bg-white border border-gray-200 font-black text-gray-700">+</button>
+            <div class="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-1 py-1 shrink-0">
+              <button onclick="editCartItem(${index}, -1)" class="w-7 h-7 rounded-md bg-white border border-gray-200 font-black text-gray-700 leading-none">−</button>
+              <span class="font-black text-sm min-w-[20px] text-center">${row.qty}</span>
+              <button onclick="editCartItem(${index}, 1)" class="w-7 h-7 rounded-md bg-white border border-gray-200 font-black text-gray-700 leading-none">+</button>
+            </div>
+            <div class="font-black theme-text text-sm text-right shrink-0 min-w-[64px]">฿${formatMoney(row.total)}</div>
           </div>
         </div>
       `).join('');
@@ -3141,6 +3147,7 @@
           id: item.id,
           name: item.name,
           price: Number(item.price || 0),
+          redeemPoints: Math.max(0, Number(item.redeemPoints || 0)),
           addons: Array.isArray(item.addons) ? item.addons : [],
           imageVersion: Number(item.imageVersion || 0),
           hasImage: Boolean(item.hasImage),
@@ -3158,9 +3165,18 @@
     if (payload.carts && typeof payload.carts === 'object') state.db.carts = payload.carts;
     if (Array.isArray(payload.sales)) state.db.sales = payload.sales;
     if (payload.settings && typeof payload.settings === 'object') {
-      state.db.bank = payload.settings.bank || state.db.bank;
-      state.db.ppay = payload.settings.ppay || state.db.ppay;
-      state.db.qrOffline = payload.settings.qrOffline || state.db.qrOffline;
+      if (Object.prototype.hasOwnProperty.call(payload.settings, 'bank')) {
+        state.db.bank = String(payload.settings.bank || '');
+      }
+      if (Object.prototype.hasOwnProperty.call(payload.settings, 'ppay')) {
+        state.db.ppay = String(payload.settings.ppay || '');
+      }
+      if (Object.prototype.hasOwnProperty.call(payload.settings, 'qrOffline')) {
+        state.db.qrOffline = String(payload.settings.qrOffline || '');
+      }
+      if (Object.prototype.hasOwnProperty.call(payload.settings, 'promptPayDynamic')) {
+        setPromptPayDynamicEnabled(Boolean(payload.settings.promptPayDynamic));
+      }
       state.db.soundEnabled = Boolean(payload.settings.soundEnabled);
     }
     saveDb({ render: true, sync: false });
@@ -4337,7 +4353,12 @@
     if (qs('manual-pin')) qs('manual-pin').value = pin;
 
     const api = resolveFirebaseSyncApi();
-    if (!api) return showToast('รุ่นนี้ปิดการเชื่อมต่อออนไลน์', 'error');
+    if (!api) {
+      localStorage.removeItem(LS_PENDING_PAIR_REQUEST_ID);
+      localStorage.removeItem('FAKDU_PENDING_CLIENT_PIN');
+      showToast('โหมด LAN: เข้าใช้งานเครื่องพนักงานได้ทันที', 'success');
+      return;
+    }
     const profile = getClientProfile();
     let resolvedShopId = '';
     let serverVersion = 0;
@@ -4830,7 +4851,7 @@
       renderAnalytics();
       startLiveTimers();
       switchTab('customer', qs('tab-customer'));
-      if (!IS_CLIENT_NODE && isRestrictedStaffMode() && urlPin && !localStorage.getItem(LS_PENDING_PAIR_REQUEST_ID)) {
+      if (!IS_CLIENT_NODE && isRestrictedStaffMode() && urlPin && !localStorage.getItem(LS_PENDING_PAIR_REQUEST_ID) && resolveFirebaseSyncApi()) {
         submitClientAccessRequestFromModal();
       }
       if (!IS_CLIENT_NODE || isClientSessionValid()) {
