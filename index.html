@@ -287,6 +287,9 @@
 
             <label class="text-[10px] text-gray-400 font-bold mb-2 block uppercase">รูป QR รับเงิน (ใช้ได้แม้ไม่มีเน็ต)</label>
             <input type="file" accept="image/*" class="w-full border-2 p-2 rounded-xl text-xs font-bold mb-6 bg-gray-50" onchange="handleImage(event, 'qr')">
+            <div id="sys-qr-health" class="text-[11px] font-bold rounded-xl border p-3 bg-amber-50 border-amber-200 text-amber-700">
+                ยังไม่ได้ตรวจสอบการตั้งค่า QR
+            </div>
 
             <button onclick="saveSystemSettings()" class="w-full theme-bg py-4 rounded-[22px] font-black text-lg shadow-lg mt-6 active:scale-95">💾 บันทึกการตั้งค่า</button>
         </div>
@@ -565,6 +568,14 @@
                 <div class="mt-4 flex justify-between items-center text-black">
                     <span class="text-[12px] text-gray-400 font-bold uppercase">ยอดสุทธิ</span>
                     <span class="font-black text-4xl tracking-tighter">฿<span id="checkout-total">0</span></span>
+                </div>
+                <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left">
+                    <div class="text-[10px] font-black uppercase tracking-wide text-slate-500 mb-2">สมาชิกเช็คบิล</div>
+                    <div class="flex gap-2 mb-2">
+                        <input id="checkout-member-keyword" type="text" placeholder="ชื่อสมาชิก หรือ เบอร์โทร" class="flex-1 border-2 border-slate-200 p-2.5 rounded-xl text-sm font-bold bg-white outline-none focus:border-primary">
+                        <button onclick="attachCheckoutMember()" class="px-3 py-2.5 rounded-xl bg-slate-900 text-white text-[11px] font-black shrink-0 active:scale-95">ผูกสมาชิก</button>
+                    </div>
+                    <div id="checkout-member-summary" class="text-[11px] font-black text-slate-500">ยังไม่ได้ผูกสมาชิกกับบิลนี้</div>
                 </div>
             </div>
             <div id="checkout-qr-area" class="text-center bg-white p-5 border-t border-dashed border-gray-200">

@@ -136,6 +136,7 @@
     appliedOpsPersistTimer: null,
     employeeLinkFromServer: '',
     localServerBackupTimer: null,
+    staffBootstrapTimer: null,
     localServerEventSource: null,
     localServerEventReconnectTimer: null,
     localServerPullTimer: null,
@@ -662,6 +663,7 @@
 
   //* normalize open
   function normalizeUnit(unit, id) {
+    const checkoutMemberId = String(unit?.checkoutMemberId || '').trim();
     return {
       id,
       status: unit?.status || 'idle',
@@ -669,6 +671,7 @@
       lastActivityAt: unit?.lastActivityAt || null,
       checkoutRequested: Boolean(unit?.checkoutRequested),
       checkoutRequestedAt: unit?.checkoutRequestedAt || null,
+      checkoutMemberId,
       newItemsQty: Number(unit?.newItemsQty || 0),
       lastOrderBy: unit?.lastOrderBy || '',
       orders: Array.isArray(unit?.orders) ? unit.orders.map((order) => ({
@@ -913,7 +916,20 @@
     if (IS_CLIENT_NODE) return;
     // กันเคสเครื่องพนักงานยังไม่เคย pull snapshot ล่าสุดจากเครื่องแม่ แล้วดัน push DB เก่าทับค่าใหม่
     // (เช่น ค่า bank/พร้อมเพย์/QR) ทำให้หน้าเช็คบิลเห็น QR โชว์แล้วหาย
-    if (!force && state.isStaffMode && Number(state.lastLocalServerSeenSavedAt || 0) <= 0) return;
+    if (!force && state.isStaffMode && Number(state.lastLocalServerSeenSavedAt || 0) <= 0) {
+      // staff เครื่องใหม่อาจยังไม่เคย pull snapshot แม่ ทำให้ action แรกเหมือน "ไม่เรียลไทม์"
+      // ให้ bootstrap sync ทันที แล้วค่อย push อีกครั้งเมื่อเห็น savedAt ล่าสุดแล้ว
+      if (!state.staffBootstrapTimer) {
+        state.staffBootstrapTimer = setTimeout(async () => {
+          state.staffBootstrapTimer = null;
+          await pullDbFromLocalServerRealtime();
+          if (Number(state.lastLocalServerSeenSavedAt || 0) > 0) {
+            scheduleLocalServerBackup(true);
+          }
+        }, 120);
+      }
+      return;
+    }
     const now = Date.now();
     if (!force && (now - state.lastLocalServerBackupAt) < 800) return;
     clearTimeout(state.localServerBackupTimer);
@@ -1724,6 +1740,7 @@
     state.currentCheckoutTotal = total;
     if (qs('checkout-unit-id')) qs('checkout-unit-id').textContent = String(unit.id);
     if (qs('checkout-total')) qs('checkout-total').textContent = formatMoney(total);
+    if (qs('checkout-member-keyword')) qs('checkout-member-keyword').value = '';
     if (list) {
       list.innerHTML = unit.orders.map((row, index) => `
         <div class="flex justify-between items-center gap-3 py-3">
@@ -1741,6 +1758,7 @@
       `).join('');
     }
     updateQrDisplay();
+    renderCheckoutMemberSummary(unit);
     openModal('modal-checkout');
     const paymentButtons = qs('checkout-payment-buttons');
     if (paymentButtons) paymentButtons.classList.toggle('hidden', IS_CLIENT_NODE);
@@ -1922,6 +1940,32 @@
       : 'ไม่มี QR พร้อมใช้งาน';
   }
 
+  function renderCheckoutMemberSummary(unit) {
+    const summary = qs('checkout-member-summary');
+    if (!summary) return;
+    const member = getMemberById(unit?.checkoutMemberId || '');
+    if (!member) {
+      summary.className = 'text-[11px] font-black text-slate-500';
+      summary.textContent = 'ยังไม่ได้ผูกสมาชิกกับบิลนี้';
+      return;
+    }
+    summary.className = 'text-[11px] font-black text-emerald-700';
+    summary.textContent = `${member.name || '-'} • ${member.phone || 'ไม่มีเบอร์โทร'} • ${formatMoney(member.points || 0)} พอยท์`;
+  }
+
+  function attachCheckoutMember() {
+    const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
+    if (!unit || !unit.orders.length) return;
+    const keyword = String(qs('checkout-member-keyword')?.value || '').trim();
+    if (!keyword) return showToast('กรอกชื่อหรือเบอร์สมาชิกก่อน', 'error');
+    const member = resolveMemberByKeyword(keyword);
+    if (!member) return showToast('ไม่พบสมาชิก', 'error');
+    unit.checkoutMemberId = member.id;
+    renderCheckoutMemberSummary(unit);
+    saveDb({ render: false, sync: true });
+    showToast(`ผูกสมาชิก ${member.name || member.phone} แล้ว`, 'success');
+  }
+
   function deleteOrderItem(index) {
     if (!canManageOrders()) {
       showToast('เฉพาะเครื่องหลักที่เข้าโหมดแอดมินเท่านั้นที่ลบออร์เดอร์ได้', 'error');
@@ -1967,7 +2011,14 @@
       if (!row || !row.redeemedByPoints || row.redeemPointsDeducted) return sum;
       return sum + Math.max(0, Number(row.redeemPoints || 0)) * Math.max(1, Number(row.qty || 1));
     }, 0);
-    const memberSnapshot = null;
+    const memberSnapshotSource = getMemberById(unit.checkoutMemberId || '');
+    const memberSnapshot = memberSnapshotSource
+      ? {
+          id: memberSnapshotSource.id,
+          name: memberSnapshotSource.name || '',
+          phone: memberSnapshotSource.phone || ''
+        }
+      : null;
     const timestamp = new Date();
     state.db.sales.push({
       id: `SALE-${Date.now()}`,
@@ -1991,6 +2042,7 @@
     unit.lastActivityAt = null;
     unit.checkoutRequested = false;
     unit.checkoutRequestedAt = null;
+    unit.checkoutMemberId = '';
     unit.newItemsQty = 0;
     unit.lastOrderBy = '';
     closeModal('modal-checkout');
@@ -2649,6 +2701,7 @@
     applyTheme();
     saveDb({ render: true, sync: true });
     showToast('บันทึกการตั้งค่าแล้ว', 'success');
+    updateQrSetupHealth();
   }
 
   function getSortedMembers() {
@@ -2773,6 +2826,7 @@
     if (type === 'qr') {
       state.db.qrOffline = result;
       saveDb({ render: false, sync: true });
+      updateQrSetupHealth();
       showToast('อัปเดต QR Offline แล้ว', 'success');
       return;
     }
@@ -2821,10 +2875,35 @@
 
   function renderSystemPanels() {
     loadSettingsToForm();
+    updateQrSetupHealth();
     updateSyncUi();
     renderClientApprovalList();
     updateSyncCheckStatusUi();
     renderMemberAdminPanel();
+  }
+
+  function updateQrSetupHealth() {
+    const box = qs('sys-qr-health');
+    if (!box) return;
+    const hasPpay = Boolean(toPromptPayTarget(state.db.ppay));
+    const hasQrImage = Boolean(state.db.qrOffline);
+    if (hasPpay && hasQrImage) {
+      box.className = 'text-[11px] font-bold rounded-xl border p-3 bg-emerald-50 border-emerald-200 text-emerald-700';
+      box.textContent = 'พร้อมใช้งาน: มีเบอร์/เลขพร้อมเพย์ถูกต้อง และมีรูป QR สำรองแล้ว';
+      return;
+    }
+    if (hasPpay && !hasQrImage) {
+      box.className = 'text-[11px] font-bold rounded-xl border p-3 bg-blue-50 border-blue-200 text-blue-700';
+      box.textContent = 'พร้อมใช้งานบางส่วน: สร้าง QR Dynamic ได้ แต่ยังไม่มีรูป QR สำรอง';
+      return;
+    }
+    if (!hasPpay && hasQrImage) {
+      box.className = 'text-[11px] font-bold rounded-xl border p-3 bg-amber-50 border-amber-200 text-amber-700';
+      box.textContent = 'ใช้ได้แบบ Static เท่านั้น: ยังไม่ได้ใส่เบอร์/เลขพร้อมเพย์ที่ถูกต้อง';
+      return;
+    }
+    box.className = 'text-[11px] font-bold rounded-xl border p-3 bg-rose-50 border-rose-200 text-rose-700';
+    box.textContent = 'ยังใช้งาน QR ไม่ได้: ยังไม่ได้ใส่เบอร์/เลขพร้อมเพย์ และยังไม่ได้อัปโหลดรูป QR';
   }
   //* system close
 
@@ -4890,6 +4969,8 @@
         if (qs('modal-checkout') && !qs('modal-checkout').classList.contains('hidden')) updateQrDisplay();
       });
     }
+    const ppayInput = qs('sys-ppay');
+    if (ppayInput) ppayInput.addEventListener('input', updateQrSetupHealth);
     document.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
@@ -4933,6 +5014,7 @@
     editCartItem,
     confirmOrderSend,
     openCheckout,
+    attachCheckoutMember,
     deleteOrderItem,
     confirmPayment,
     openRedeemPointsModal,
