@@ -524,6 +524,29 @@
   function isRestrictedStaffMode() {
     return !IS_CLIENT_NODE && state.isStaffMode;
   }
+  function normalizeClientAccessMode(value, fallback = 'customer') {
+    const mode = String(value || '').trim().toLowerCase();
+    if (mode === 'shop' || mode === 'checkout' || mode === 'bill') return 'shop';
+    if (mode === 'customer' || mode === 'order') return 'customer';
+    return fallback;
+  }
+  function getSelectedClientAccessMode() {
+    return normalizeClientAccessMode(qs('client-access-mode')?.value || 'customer', 'customer');
+  }
+  function getClientSessionAccessMode() {
+    const session = getStoredClientSession();
+    return normalizeClientAccessMode(session?.accessMode || 'customer', 'customer');
+  }
+  function applyClientAccessModeUi() {
+    if (!IS_CLIENT_NODE) return;
+    const mode = getClientSessionAccessMode();
+    const customerTab = qs('tab-customer');
+    const shopTab = qs('tab-shop');
+    if (customerTab) customerTab.classList.toggle('hidden', mode === 'shop');
+    if (shopTab) shopTab.classList.toggle('hidden', mode === 'customer');
+    if (mode === 'shop' && state.activeTab === 'customer') switchTab('shop', shopTab);
+    if (mode === 'customer' && state.activeTab === 'shop') switchTab('customer', customerTab);
+  }
   function applyStaffModeUi() {
     if (IS_CLIENT_NODE) return;
     const nav = document.querySelector('.top-nav');
@@ -956,6 +979,11 @@
 
   //* tab open
   function switchTab(id, element = null) {
+    if (IS_CLIENT_NODE) {
+      const accessMode = getClientSessionAccessMode();
+      if (accessMode === 'shop' && id === 'customer') id = 'shop';
+      if (accessMode === 'customer' && id === 'shop') id = 'customer';
+    }
     if (isRestrictedStaffMode() && (id === 'manage' || id === 'system')) {
       showToast('โหมดพนักงานเข้าได้เฉพาะ ลูกค้า และ เช็คบิล', 'error');
       id = 'customer';
@@ -1605,22 +1633,8 @@
   }
 
   function openRedeemPointsModal() {
-    let member = getCheckoutResolvedMember();
-    if (!member) {
-      const promptValue = window.prompt('กรอกเบอร์โทร หรือชื่อสมาชิกเพื่อแลกแต้ม', String(qs('checkout-member-keyword')?.value || ''));
-      if (promptValue === null) return;
-      const keyword = String(promptValue || '').trim();
-      if (!keyword) {
-        showToast('ยังไม่ได้กรอกข้อมูลสมาชิก', 'error');
-        return;
-      }
-      if (qs('checkout-member-keyword')) qs('checkout-member-keyword').value = keyword;
-      member = lookupCheckoutMember(keyword);
-      if (!member) {
-        showToast('ไม่พบสมาชิกจากชื่อหรือเบอร์ที่กรอก', 'error');
-        return;
-      }
-    }
+    const member = getCheckoutResolvedMember();
+    if (!member) return showToast('กรุณากรอกเบอร์โทรหรือชื่อสมาชิกก่อนกดแลกแต้ม', 'error');
     const redeemable = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
     if (!redeemable.length) {
       showToast('ยังไม่มีเมนูที่ตั้งค่าแลกแต้ม', 'error');
@@ -1667,10 +1681,6 @@
     if (!picked.length) return showToast('ยังไม่ได้เลือกเมนูแลกแต้ม', 'error');
     if (totalNeed > Number(member.points || 0)) return showToast('แต้มไม่พอ', 'error');
 
-    const selectedLines = picked.map(({ item, qty, lineNeed }) => `• ${item.name} x${qty} (${formatMoney(lineNeed)} แต้ม)`).join('\n');
-    const shouldRedeem = window.confirm(`ยืนยันการแลกแต้มของ ${member.name || member.phone || 'สมาชิก'}\n${selectedLines}\nรวมใช้ ${formatMoney(totalNeed)} แต้ม`);
-    if (!shouldRedeem) return;
-
     picked.forEach(({ item, qty, points }) => {
       unit.orders.push({
         id: `ORD-RDM-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1694,7 +1704,7 @@
     closeModal('modal-redeem-points');
     saveDb({ render: true, sync: true });
     openCheckout(unit.id);
-    showToast(`เพิ่มเมนูแลกแต้มแล้ว (${formatMoney(totalNeed)} แต้ม)`, 'success');
+    showToast(`เพิ่มเมนูแลกแต้มให้ ${member.name || member.phone || 'สมาชิก'} แล้ว (${formatMoney(totalNeed)} แต้ม)`, 'success');
   }
 
   function updateQrDisplay() {
@@ -2245,11 +2255,10 @@
   }
 
   function renderRedeemManagementList() {
-    const eligibleBox = qs('redeem-eligible-list');
-    const disabledBox = qs('redeem-disabled-list');
+    const configBox = qs('redeem-config-list');
     const eligibleCountEl = qs('redeem-eligible-count');
     const disabledCountEl = qs('redeem-disabled-count');
-    if (!eligibleBox || !disabledBox) return;
+    if (!configBox) return;
     const eligibleItems = state.db.items
       .filter((item) => Number(item.redeemPoints || 0) > 0)
       .sort((a, b) => Number(a.redeemPoints || 0) - Number(b.redeemPoints || 0));
@@ -2259,32 +2268,36 @@
     if (eligibleCountEl) eligibleCountEl.textContent = formatMoney(eligibleItems.length);
     if (disabledCountEl) disabledCountEl.textContent = formatMoney(disabledItems.length);
 
-    eligibleBox.innerHTML = eligibleItems.length
-      ? eligibleItems.map((item) => `
-        <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-center justify-between gap-2">
-          <div class="min-w-0">
-            <div class="font-black text-sm text-emerald-900 truncate">${escapeHtml(item.name)}</div>
-            <div class="text-[10px] font-black text-emerald-700">ใช้ ${formatMoney(item.redeemPoints)} แต้ม/ชิ้น</div>
+    const sortedItems = [...eligibleItems, ...disabledItems];
+    configBox.innerHTML = sortedItems.length
+      ? sortedItems.map((item) => {
+        const checked = Number(item.redeemPoints || 0) > 0;
+        return `
+        <div class="border rounded-xl p-3 ${checked ? 'bg-emerald-50 border-emerald-100' : 'bg-gray-50 border-gray-200'}">
+          <div class="flex items-center justify-between gap-2">
+            <label class="inline-flex items-center gap-2 min-w-0 cursor-pointer">
+              <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleRedeemEligibility('${escapeHtml(item.id)}', this.checked)" class="w-4 h-4 accent-emerald-600">
+              <span class="font-black text-sm ${checked ? 'text-emerald-900' : 'text-gray-800'} truncate">${escapeHtml(item.name)}</span>
+            </label>
+            <div class="text-[10px] font-black ${checked ? 'text-emerald-700' : 'text-gray-500'}">${checked ? 'เปิดสิทธิ์แล้ว' : 'ยังไม่เปิดสิทธิ์'}</div>
           </div>
-          <div class="flex gap-2 shrink-0">
-            <button onclick="quickEditRedeemItem('${escapeHtml(item.id)}')" class="px-3 py-2 rounded-lg bg-white border border-emerald-200 text-emerald-700 text-[10px] font-black">แก้ไขแต้ม</button>
-            <button onclick="quickDisableRedeemItem('${escapeHtml(item.id)}')" class="px-3 py-2 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[10px] font-black">ลบสิทธิ์</button>
+          <div class="mt-2 flex items-center gap-2">
+            <input
+              id="redeem-point-input-${escapeHtml(item.id)}"
+              type="number"
+              min="1"
+              value="${Math.max(1, Math.floor(Number(item.redeemPoints || 0) || 1))}"
+              class="w-24 border rounded-lg px-2 py-1.5 text-sm font-black text-center ${checked ? 'bg-white' : 'bg-gray-100'}"
+              ${checked ? '' : 'disabled'}
+            />
+            <span class="text-[10px] font-black text-gray-500">แต้ม/ชิ้น</span>
+            <button onclick="saveRedeemEligibility('${escapeHtml(item.id)}')" class="ml-auto px-3 py-1.5 rounded-lg text-[10px] font-black ${checked ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}" ${checked ? '' : 'disabled'}>
+              บันทึกแต้ม
+            </button>
           </div>
-        </div>
-      `).join('')
-      : '<div class="bg-gray-50 border rounded-xl p-3 text-xs font-bold text-gray-400 text-center">ยังไม่มีเมนูที่เปิดสิทธิ์แลกแต้ม</div>';
-
-    disabledBox.innerHTML = disabledItems.length
-      ? disabledItems.map((item) => `
-        <div class="bg-gray-50 border rounded-xl p-3 flex items-center justify-between gap-2">
-          <div class="min-w-0">
-            <div class="font-black text-sm text-gray-800 truncate">${escapeHtml(item.name)}</div>
-            <div class="text-[10px] font-bold text-gray-500">ยังไม่เปิดสิทธิ์แลกแต้ม</div>
-          </div>
-          <button onclick="quickEnableRedeemItem('${escapeHtml(item.id)}')" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-[10px] font-black shrink-0">+ เพิ่มสิทธิ์</button>
-        </div>
-      `).join('')
-      : '<div class="bg-gray-50 border rounded-xl p-3 text-xs font-bold text-gray-400 text-center">เมนูทั้งหมดเปิดสิทธิ์แลกแต้มแล้ว</div>';
+        </div>`;
+      }).join('')
+      : '<div class="bg-gray-50 border rounded-xl p-3 text-xs font-bold text-gray-400 text-center">ยังไม่มีเมนูในระบบ</div>';
   }
 
   function applyItemRedeemPoints(itemId, redeemPoints) {
@@ -2300,20 +2313,14 @@
   function quickEnableRedeemItem(itemId) {
     const target = state.db.items.find((row) => String(row.id) === String(itemId));
     if (!target) return showToast('ไม่พบเมนู', 'error');
-    const raw = window.prompt(`กำหนดแต้มสำหรับเมนู ${target.name}`, '10');
-    if (raw === null) return;
-    const points = Math.max(0, Math.floor(Number(raw || 0)));
-    if (!points) return showToast('แต้มต้องมากกว่า 0', 'error');
-    if (!applyItemRedeemPoints(itemId, points)) return;
+    if (!applyItemRedeemPoints(itemId, 10)) return;
     showToast(`เปิดสิทธิ์แลกแต้มให้ ${target.name} แล้ว`, 'success');
   }
 
   function quickEditRedeemItem(itemId) {
     const target = state.db.items.find((row) => String(row.id) === String(itemId));
     if (!target) return showToast('ไม่พบเมนู', 'error');
-    const raw = window.prompt(`แก้ไขแต้มของเมนู ${target.name}`, String(Math.max(0, Number(target.redeemPoints || 0))));
-    if (raw === null) return;
-    const points = Math.max(0, Math.floor(Number(raw || 0)));
+    const points = Math.max(1, Number(target.redeemPoints || 1));
     if (!points) return showToast('แต้มต้องมากกว่า 0 (หากต้องการปิดสิทธิ์ ให้กดปุ่มลบสิทธิ์)', 'error');
     if (!applyItemRedeemPoints(itemId, points)) return;
     showToast(`อัปเดตแต้มของ ${target.name} แล้ว`, 'success');
@@ -2322,9 +2329,28 @@
   function quickDisableRedeemItem(itemId) {
     const target = state.db.items.find((row) => String(row.id) === String(itemId));
     if (!target) return showToast('ไม่พบเมนู', 'error');
-    if (!window.confirm(`ยกเลิกสิทธิ์แลกแต้มของ ${target.name} ใช่ไหม?`)) return;
     if (!applyItemRedeemPoints(itemId, 0)) return;
     showToast(`ลบสิทธิ์แลกแต้มของ ${target.name} แล้ว`, 'success');
+  }
+
+  function toggleRedeemEligibility(itemId, checked) {
+    const input = qs(`redeem-point-input-${itemId}`);
+    if (!checked) {
+      if (!applyItemRedeemPoints(itemId, 0)) return;
+      showToast('ปิดสิทธิ์แลกแต้มแล้ว', 'success');
+      return;
+    }
+    const points = Math.max(1, Math.floor(Number(input?.value || 1)));
+    if (!applyItemRedeemPoints(itemId, points)) return;
+    showToast(`เปิดสิทธิ์แลกแต้ม ${formatMoney(points)} แต้ม/ชิ้น`, 'success');
+  }
+
+  function saveRedeemEligibility(itemId) {
+    const input = qs(`redeem-point-input-${itemId}`);
+    const points = Math.max(1, Math.floor(Number(input?.value || 0)));
+    if (!points) return showToast('แต้มต้องมากกว่า 0', 'error');
+    if (!applyItemRedeemPoints(itemId, points)) return;
+    showToast(`บันทึกแต้ม ${formatMoney(points)} แต้ม/ชิ้นแล้ว`, 'success');
   }
 
   function openMenuModal(itemId = null) {
@@ -3074,15 +3100,18 @@
         clientId,
         profileName: payload.profileName || getClientProfile().profileName,
         clientSessionToken: payload.clientSessionToken || '',
-        syncVersion: Number(payload.syncVersion || 1)
+        syncVersion: Number(payload.syncVersion || 1),
+        accessMode: normalizeClientAccessMode(payload.accessMode || 'customer')
       };
       await persistClientSession(sessionPayload);
       state.db.sync.clientSession = {
         shopId: sessionPayload.shopId || state.db.shopId || '',
         clientId,
         clientSessionToken: sessionPayload.clientSessionToken || '',
-        syncVersion: Number(sessionPayload.syncVersion || 1)
+        syncVersion: Number(sessionPayload.syncVersion || 1),
+        accessMode: normalizeClientAccessMode(sessionPayload.accessMode || 'customer')
       };
+      applyClientAccessModeUi();
       if (sessionPayload.shopId) {
         await pullSnapshotFromCloud(sessionPayload.shopId);
         await requestMissingMenuImages();
@@ -3186,6 +3215,7 @@
     const session = getStoredClientSession();
     if (!session) return false;
     if (!session.clientSessionToken || !session.clientId || !session.shopId) return false;
+    session.accessMode = normalizeClientAccessMode(session.accessMode || 'customer');
     return Number(session.syncVersion || 0) === Number(state.db.sync.syncVersion || session.syncVersion || 1);
   }
 
@@ -3457,6 +3487,7 @@
       requestId: String(client?.requestId || ''),
       shopId: String(client?.shopId || ''),
       syncVersion: Number(client?.syncVersion || state.db.sync.syncVersion || 1),
+      requestedMode: normalizeClientAccessMode(client?.accessMode || client?.requestedMode || 'customer'),
       status: String(client?.status || 'pending').toLowerCase(),
       requestedAt: Number(client?.created_at || client?.requestedAt || Date.now())
     };
@@ -3495,6 +3526,7 @@
       existing.pin = normalized.pin || existing.pin || '';
       existing.requestId = normalized.requestId || existing.requestId || '';
       existing.syncVersion = normalized.syncVersion || existing.syncVersion || activeVersion;
+      existing.requestedMode = normalizeClientAccessMode(normalized.requestedMode || existing.requestedMode || 'customer');
       existing.status = 'pending';
     } else {
       state.db.sync.approvals.unshift({
@@ -3505,6 +3537,7 @@
         pin: normalized.pin || activePin,
         requestId: normalized.requestId || '',
         syncVersion: normalized.syncVersion || activeVersion,
+        requestedMode: normalizeClientAccessMode(normalized.requestedMode || 'customer'),
         requestedAt: normalized.requestedAt || Date.now(),
         status: 'pending'
       });
@@ -3521,6 +3554,7 @@
         pin: normalized.pin || activePin,
         requestId: normalized.requestId || '',
         syncVersion: normalized.syncVersion || activeVersion,
+        accessMode: normalizeClientAccessMode(normalized.requestedMode || 'customer'),
         requestedAt: Date.now()
       }).catch(() => {});
     }
@@ -3690,10 +3724,11 @@
         </div>
         <div class="flex-1 min-w-0">
           <div class="font-black text-gray-800 truncate">${escapeHtml(item.profileName || item.name || item.clientId)}</div>
-          <div class="text-[10px] text-gray-400 font-bold">PIN ${escapeHtml(item.pin || '-')} • ${thaiDate(item.requestedAt)}</div>
+          <div class="text-[10px] text-gray-400 font-bold">PIN ${escapeHtml(item.pin || '-')} • ${thaiDate(item.requestedAt)} • โหมด ${normalizeClientAccessMode(item.requestedMode || 'customer') === 'shop' ? 'เช็คบิล' : 'ลูกค้า'}</div>
         </div>
         <div class="flex gap-2 shrink-0">
-          <button onclick="approveClient('${item.clientId}')" class="px-3 py-2 rounded-xl bg-emerald-500 text-white text-xs font-black">อนุมัติ</button>
+          <button onclick="approveClientWithMode('${item.clientId}', 'customer')" class="px-3 py-2 rounded-xl bg-blue-500 text-white text-xs font-black">โหมดลูกค้า</button>
+          <button onclick="approveClientWithMode('${item.clientId}', 'shop')" class="px-3 py-2 rounded-xl bg-emerald-500 text-white text-xs font-black">โหมดเช็คบิล</button>
           <button onclick="rejectClient('${item.clientId}')" class="px-3 py-2 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs font-black">ปฏิเสธ</button>
         </div>
       </div>
@@ -3722,7 +3757,7 @@
     const item = pending[0];
     const label = item.profileName || item.name || item.clientId || 'อุปกรณ์เสริม';
     nameEl.textContent = label;
-    metaEl.textContent = `PIN ${item.pin || '-'} • ${thaiDate(item.requestedAt || Date.now())}`;
+    metaEl.textContent = `PIN ${item.pin || '-'} • ${thaiDate(item.requestedAt || Date.now())} • โหมด ${normalizeClientAccessMode(item.requestedMode || 'customer') === 'shop' ? 'เช็คบิล' : 'ลูกค้า'}`;
     avatarEl.innerHTML = item.avatar
       ? `<img src="${item.avatar}" class="w-full h-full object-cover">`
       : `<span class="font-black text-gray-600 text-xl">${escapeHtml((label || 'C').slice(0, 1).toUpperCase())}</span>`;
@@ -3731,7 +3766,7 @@
   function approveNextClientRequest() {
     const item = Array.isArray(state.db.sync.approvals) ? state.db.sync.approvals[0] : null;
     if (!item?.clientId) return;
-    approveClient(item.clientId);
+    approveClientWithMode(item.clientId, item.requestedMode || 'customer');
   }
 
   function rejectNextClientRequest() {
@@ -3764,6 +3799,10 @@
   }
 
   function approveClient(clientId) {
+    return approveClientWithMode(clientId, null);
+  }
+
+  function approveClientWithMode(clientId, forcedMode = null) {
     if (!state.isPro && state.db.sync.clients.filter((row) => row.approved).length >= TRIAL_LIMITS.onlineClientMax) {
       showToast(`รุ่นทดลองจำกัดอุปกรณ์เสริม ${TRIAL_LIMITS.onlineClientMax} เครื่อง`, 'error');
       return;
@@ -3771,8 +3810,9 @@
 
     const approval = state.db.sync.approvals.find((row) => row.clientId === clientId);
     if (!approval) return;
+    const approvedMode = normalizeClientAccessMode(forcedMode || approval.requestedMode || 'customer', 'customer');
 
-    console.log('[FAKDU][SYNC] master approve request', { clientId, approval });
+    console.log('[FAKDU][SYNC] master approve request', { clientId, approvedMode, approval });
 
     if (Number(approval.syncVersion || 0) !== Number(state.db.sync.syncVersion || 1)) {
       state.db.sync.approvals = state.db.sync.approvals.filter((row) => row.clientId !== clientId);
@@ -3799,7 +3839,8 @@
         sessionSyncVersion: Number(state.db.sync.syncVersion || 1),
         lastSeen: Date.now(),
         lastSyncAt: null,
-        pendingOps: 0
+        pendingOps: 0,
+        accessMode: approvedMode
       };
       state.db.sync.clients.push(client);
     } else {
@@ -3814,6 +3855,7 @@
       });
       client.sessionSyncVersion = Number(state.db.sync.syncVersion || 1);
       client.lastSeen = Date.now();
+      client.accessMode = approvedMode;
     }
 
     state.db.sync.approvedClients = state.db.sync.clients
@@ -3821,7 +3863,8 @@
       .map((row) => ({
         clientId: row.clientId,
         profileName: row.profileName || row.name || row.clientId,
-        sessionSyncVersion: Number(row.sessionSyncVersion || state.db.sync.syncVersion || 1)
+        sessionSyncVersion: Number(row.sessionSyncVersion || state.db.sync.syncVersion || 1),
+        accessMode: normalizeClientAccessMode(row.accessMode || 'customer')
       }));
 
     const api = resolveFirebaseSyncApi();
@@ -3837,7 +3880,8 @@
           profileName: client.profileName || client.name || client.clientId,
           clientSessionToken: client.clientSessionToken,
           signed_token: client.clientSessionToken,
-          sessionSyncVersion: Number(client.sessionSyncVersion || state.db.sync.syncVersion || 1)
+          sessionSyncVersion: Number(client.sessionSyncVersion || state.db.sync.syncVersion || 1),
+          accessMode: approvedMode
         }).catch(() => {});
       }
       if (state.db.shopId && typeof api.upsertClient === 'function') {
@@ -3851,6 +3895,7 @@
           requestId: approval.requestId || '',
           clientSessionToken: client.clientSessionToken,
           sessionSyncVersion: Number(client.sessionSyncVersion || state.db.sync.syncVersion || 1),
+          accessMode: approvedMode,
           approvedAt: Date.now(),
           approvedBy: state.hwid || state.db.sync.masterDeviceId || 'MASTER'
         }).catch(() => {});
@@ -3867,7 +3912,7 @@
 
     renderOnlineClientsUi();
     saveDb({ render: false, sync: true });
-    showToast('อนุมัติอุปกรณ์เสริมแล้ว', 'success');
+    showToast(`อนุมัติอุปกรณ์เสริมแล้ว (โหมด${approvedMode === 'shop' ? 'เช็คบิล' : 'ลูกค้า'})`, 'success');
   }
 
   function rejectClient(clientId) {
@@ -4076,7 +4121,9 @@
         try {
           const data = JSON.parse(decodedText);
           parsedPin = normalizeSyncPin(data.pin || '');
+          const parsedMode = normalizeClientAccessMode(data.accessMode || data.mode || 'customer');
           if (parsedPin && qs('manual-pin')) qs('manual-pin').value = parsedPin;
+          if (qs('client-access-mode')) qs('client-access-mode').value = parsedMode;
         } catch (_) {
           parsedPin = normalizeSyncPin(decodedText);
           if (parsedPin && qs('manual-pin')) qs('manual-pin').value = parsedPin;
@@ -4172,9 +4219,12 @@
   async function submitClientAccessRequest() {
     const rawPin = qs('manual-pin')?.value?.trim() || '';
     const pin = normalizeSyncPin(rawPin);
+    const accessMode = getSelectedClientAccessMode();
+    localStorage.setItem('FAKDU_CLIENT_ACCESS_MODE', accessMode);
     console.log('[FAKDU][SYNC] submitClientAccessRequest start', {
       rawPin,
-      normalizedPin: pin
+      normalizedPin: pin,
+      accessMode
     });
     if (pin.length !== 6) return showToast('PIN ต้องเป็นตัวเลข 6 หลัก', 'error');
     if (qs('manual-pin')) qs('manual-pin').value = pin;
@@ -4211,6 +4261,7 @@
         profileName: profile.profileName,
         avatar: profile.avatar,
         pin,
+        accessMode,
         shopId: resolvedShopId,
         syncVersion: serverVersion
       });
@@ -4523,14 +4574,19 @@
         if (qs('sys-client-name')) qs('sys-client-name').value = profile.profileName;
         if (qs('client-device-name')) qs('client-device-name').textContent = profile.profileName;
         if (qs('client-avatar') && profile.avatar) qs('client-avatar').src = profile.avatar;
+        if (qs('client-access-mode')) {
+          qs('client-access-mode').value = normalizeClientAccessMode(localStorage.getItem('FAKDU_CLIENT_ACCESS_MODE') || 'customer');
+        }
 
         const session = getStoredClientSession();
         state.db.sync.clientSession = session ? {
           shopId: session.shopId || '',
           clientId: session.clientId || profile.clientId,
           clientSessionToken: session.clientSessionToken || '',
-          syncVersion: Number(session.syncVersion || state.db.sync.syncVersion || 1)
+          syncVersion: Number(session.syncVersion || state.db.sync.syncVersion || 1),
+          accessMode: normalizeClientAccessMode(session.accessMode || 'customer')
         } : null;
+        applyClientAccessModeUi();
         if (isClientSessionValid()) {
           const api = resolveFirebaseSyncApi();
           if (api && state.db.shopId) {
@@ -4687,6 +4743,8 @@
     quickEnableRedeemItem,
     quickEditRedeemItem,
     quickDisableRedeemItem,
+    toggleRedeemEligibility,
+    saveRedeemEligibility,
     saveMenuItem,
     deleteItem,
     updateUnits,
@@ -4728,6 +4786,7 @@
     adjustAddonQty,
     confirmAddonSelection,
     approveClient,
+    approveClientWithMode,
     approveNextClientRequest,
     rejectClient,
     rejectNextClientRequest,
