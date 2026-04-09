@@ -14,9 +14,9 @@
    ```bash
    python3 scripts/check_python_runtime_ready.py
    ```
-3. ถ้าจะใช้ Firebase Sync ให้เช็คเพิ่ม
+3. เช็คความพร้อม LAN Sync เพิ่ม (ลิงก์พนักงาน + local-db + realtime events)
    ```bash
-   python3 scripts/check_firebase_sync_ready.py
+   python3 scripts/check_lan_sync_ready.py
    ```
 4. เตรียม 2 อุปกรณ์/2 browser profile
    - **เครื่องหลัก (Master)**: ใช้สำหรับตั้งค่าร้าน + อนุมัติคำขอ

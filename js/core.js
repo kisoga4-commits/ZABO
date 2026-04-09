@@ -140,6 +140,7 @@
     localServerBackupTimer: null,
     localServerEventSource: null,
     localServerEventReconnectTimer: null,
+    localServerPullTimer: null,
     lastLocalServerBackupAt: 0,
     lastLocalServerSeenSavedAt: 0,
     lastLocalServerSyncToastAt: 0,
@@ -497,20 +498,8 @@
     return `MSG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
   }
   function resolveFirebaseSyncApi() {
-    if (state.firebaseSyncApi) return state.firebaseSyncApi;
-    const factory = window.FakduSync && typeof window.FakduSync.resolveApi === 'function'
-      ? window.FakduSync.resolveApi
-      : (window.FakduFirebaseSync && typeof window.FakduFirebaseSync.resolveApi === 'function'
-        ? window.FakduFirebaseSync.resolveApi
-        : null);
-    if (!factory) return null;
-    try {
-      state.firebaseSyncApi = factory();
-      return state.firebaseSyncApi;
-    } catch (error) {
-      console.warn('Firebase sync unavailable', error);
-      return null;
-    }
+    // LAN-first build: disabled cloud adapter path to reduce runtime overhead.
+    return null;
   }
   function getClientStatus(client) {
     if (!client) return 'offline';
@@ -909,6 +898,10 @@
   function startLocalServerRealtimeSync() {
     if (IS_CLIENT_NODE) return;
     pullDbFromLocalServerRealtime();
+    clearInterval(state.localServerPullTimer);
+    state.localServerPullTimer = setInterval(() => {
+      pullDbFromLocalServerRealtime();
+    }, 1500);
     if (typeof EventSource !== 'function') return;
     if (state.localServerEventSource) return;
     try {
@@ -919,10 +912,17 @@
         try { payload = JSON.parse(event?.data || '{}'); } catch (_) {}
         const remoteSavedAt = Number(payload?.savedAt || 0);
         const sourceDeviceId = String(payload?.sourceDeviceId || '');
-        if (remoteSavedAt > Number(state.lastLocalServerSeenSavedAt || 0)) {
-          state.lastLocalServerSeenSavedAt = remoteSavedAt;
+
+        // สำคัญ: ถ้าเป็น event จากเครื่องอื่น ห้ามอัปเดต lastLocalServerSeenSavedAt ก่อน pull
+        // ไม่งั้น pullDbFromLocalServerRealtime() จะคิดว่า "เคยเห็นแล้ว" และไม่ดึงข้อมูลใหม่
+        // ทำให้ต้อง F5 ถึงเห็นข้อมูลล่าสุด
+        if (sourceDeviceId && sourceDeviceId === state.hwid) {
+          if (remoteSavedAt > Number(state.lastLocalServerSeenSavedAt || 0)) {
+            state.lastLocalServerSeenSavedAt = remoteSavedAt;
+          }
+          return;
         }
-        if (sourceDeviceId && sourceDeviceId === state.hwid) return;
+
         pullDbFromLocalServerRealtime();
       };
       eventSource.onerror = () => {
@@ -939,7 +939,7 @@
   function scheduleLocalServerBackup(force = false) {
     if (IS_CLIENT_NODE) return;
     const now = Date.now();
-    if (!force && (now - state.lastLocalServerBackupAt) < 5000) return;
+    if (!force && (now - state.lastLocalServerBackupAt) < 800) return;
     clearTimeout(state.localServerBackupTimer);
     state.localServerBackupTimer = setTimeout(async () => {
       try {
@@ -1841,6 +1841,13 @@
     offlineImg.classList.add('hidden');
     genArea.classList.add('hidden');
 
+    const payload = buildPromptPayPayload(state.db.ppay, state.currentCheckoutTotal, state.db.shopName);
+    const qrCanvas = generatePromptPayQrCanvas(state.db.ppay, state.currentCheckoutTotal, {
+      width: 150,
+      height: 150,
+      shopName: state.db.shopName
+    });
+
     if (!isDynamicEnabled) {
       if (state.db.qrOffline) {
         offlineImg.src = state.db.qrOffline;
@@ -1848,18 +1855,18 @@
         status.textContent = state.db.bank && state.db.ppay ? `${state.db.bank} • ${state.db.ppay} (Static)` : 'ใช้ QR ที่ร้านอัปไว้ (Static)';
         return;
       }
+      if (qrCanvas && payload) {
+        genArea.classList.remove('hidden');
+        genArea.appendChild(qrCanvas);
+        status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Auto Dynamic)`;
+        return;
+      }
       genArea.classList.remove('hidden');
-      genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่มี QR แบบภาพนิ่ง<br>กรุณาอัปโหลดในหน้าระบบ</div>';
-      status.textContent = 'โหมด Static: ยังไม่มี QR ภาพนิ่ง';
+      genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่มี QR แบบภาพนิ่ง และสร้าง Dynamic ไม่ได้<br>กรุณาใส่พร้อมเพย์หรืออัปโหลด QR</div>';
+      status.textContent = 'โหมด Static: ยังไม่มี QR พร้อมใช้งาน';
       return;
     }
 
-    const payload = buildPromptPayPayload(state.db.ppay, state.currentCheckoutTotal, state.db.shopName);
-    const qrCanvas = generatePromptPayQrCanvas(state.db.ppay, state.currentCheckoutTotal, {
-      width: 150,
-      height: 150,
-      shopName: state.db.shopName
-    });
     genArea.classList.remove('hidden');
     if (qrCanvas && payload) {
       genArea.appendChild(qrCanvas);
@@ -3219,8 +3226,8 @@
 
   function startSyncPollingFallback() {
     clearInterval(state.syncPollTimer);
+    if (!IS_CLIENT_NODE) return;
     state.syncPollTimer = setInterval(() => {
-      if (!IS_CLIENT_NODE) return;
       const key = `${LS_SNAPSHOT_PREFIX}${state.db.shopId || localStorage.getItem('FAKDU_PENDING_MASTER_SHOP_ID') || 'DEFAULT'}`;
       const raw = localStorage.getItem(key);
       if (!raw) return;
