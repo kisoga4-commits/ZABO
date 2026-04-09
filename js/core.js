@@ -356,7 +356,7 @@
     return state.hwid || 'LOCAL';
   }
   function canManageOrders() {
-    return !IS_CLIENT_NODE && state.isAdminLoggedIn;
+    return !IS_CLIENT_NODE && !isRestrictedStaffMode();
   }
   function formatDurationFrom(startTs) {
     if (!startTs) return 'ยังไม่เริ่มจับเวลา';
@@ -558,6 +558,8 @@
     nav?.classList.toggle('staff-only-nav', restricted);
     if (manageTab) manageTab.classList.toggle('hidden', restricted);
     if (systemTab) systemTab.classList.toggle('hidden', restricted);
+    const staffConnectPanel = qs('staff-connect-panel');
+    if (staffConnectPanel) staffConnectPanel.classList.toggle('hidden', !restricted);
 
     if (restricted && (state.activeTab === 'manage' || state.activeTab === 'system')) {
       switchTab('customer', qs('tab-customer'));
@@ -889,10 +891,6 @@
     if (qs('shop-logo') && logo) qs('shop-logo').src = logo;
     if (qs('system-logo-preview')) qs('system-logo-preview').src = state.db.logo || qs('system-logo-preview').src;
     if (qs('display-shop-name')) qs('display-shop-name').textContent = state.db.shopName || 'FAKDU';
-    const trial = qs('trial-badge');
-    if (trial) {
-      trial.classList.toggle('hidden', state.isPro);
-    }
     const recoveryBox = qs('pro-recovery-setup');
     if (recoveryBox) recoveryBox.classList.toggle('hidden', !state.isPro);
     const forgotBtn = qs('btn-open-recovery');
@@ -1014,46 +1012,17 @@
       showToast('โหมดพนักงานไม่สามารถเข้าหลังร้าน/ระบบ', 'error');
       return;
     }
-    if (state.isAdminLoggedIn) {
-      switchTab(target, element);
-      return;
-    }
-    state.pendingAdminAction = { target, elementId: element?.id || null };
-    const desc = qs('admin-pin-desc');
-    if (desc) desc.textContent = target === 'manage' ? 'รหัสผ่านเพื่อเข้าหลังร้าน' : 'รหัสผ่านเพื่อเข้าระบบ';
-    const pinInput = qs('admin-pin-input');
-    if (pinInput) pinInput.value = '';
-    openModal('modal-admin-pin');
-    if (pinInput) {
-      setTimeout(() => {
-        pinInput.focus();
-        pinInput.select();
-      }, 0);
-    }
+    switchTab(target, element);
   }
 
   function verifyAdminPin() {
-    const pin = String(qs('admin-pin-input')?.value || '').trim();
-    if (!pin) return showToast('กรุณากรอก PIN', 'error');
-    if (pin !== String(state.db.adminPin || '1234')) return showToast('PIN ไม่ถูกต้อง', 'error');
-    state.isAdminLoggedIn = true;
-    localStorage.setItem(LS_ADMIN, 'true');
     closeModal('modal-admin-pin');
-    showToast('เข้าใช้งานแอดมินแล้ว', 'success');
-    if (state.pendingAdminAction) {
-      const target = state.pendingAdminAction.target;
-      const el = state.pendingAdminAction.elementId ? qs(state.pendingAdminAction.elementId) : qs(`tab-${target}`);
-      switchTab(target, el);
-      state.pendingAdminAction = null;
-    }
+    showToast('ระบบนี้ไม่ต้องใช้ Admin PIN แล้ว', 'success');
   }
 
   function adminLogout() {
-    const hasPending = state.db.units.some((unit) => unit.orders.length > 0 || (state.db.carts[unit.id] || []).length > 0);
-    state.isAdminLoggedIn = false;
-    localStorage.setItem(LS_ADMIN, 'false');
     switchTab('customer', qs('tab-customer'));
-    showToast(hasPending ? 'ออกจากโหมดแอดมินแล้ว มีรายการค้างในร้าน' : 'ล็อคแอดมินแล้ว', hasPending ? 'error' : 'success');
+    showToast('ระบบนี้ไม่ต้องล็อคแอดมินแล้ว', 'success');
   }
   //* tab close
 
@@ -2076,12 +2045,6 @@
 
   function selectSalesCompareMode(mode, element) {
 
-    if (!state.isPro && mode !== 'today') {
-      showToast('รุ่นทดลองดูกราฟได้เฉพาะวันนี้', 'error');
-      openModal('modal-pro-unlock');
-      return;
-    }
-
 
     state.activeSalesCompare = mode;
     document.querySelectorAll('.sales-summary-card').forEach((card) => {
@@ -2100,12 +2063,7 @@
     const endInput = qs('search-end');
     let start = startInput?.value || '';
     let end = endInput?.value || '';
-    if (!state.isPro) {
-      start = today;
-      end = today;
-      if (startInput) startInput.value = today;
-      if (endInput) endInput.value = today;
-    } else if (!start && !end) {
+    if (!start && !end) {
       start = today;
       end = today;
       if (startInput) startInput.value = today;
@@ -2183,7 +2141,7 @@
     const topBox = qs('top-items-list');
     if (topBox) {
       const top = Object.entries(filteredItemCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-      const topDisplay = state.isPro ? top : top.slice(0, TRIAL_LIMITS.topBasicMax);
+      const topDisplay = top;
       if (!topDisplay.length) {
         topBox.innerHTML = '<div class="py-8 text-center text-gray-400 font-bold">ยังไม่มียอดฮิต</div>';
       } else {
@@ -2445,9 +2403,6 @@
       else target.imageVersion = Number(target.imageVersion || 0);
       logOperation('UPDATE_MENU_ITEM', { itemId: target.id });
     } else {
-      if (!state.isPro && state.db.items.length >= TRIAL_LIMITS.menuMax) {
-        return showToast(`รุ่นทดลองเพิ่มเมนูได้สูงสุด ${TRIAL_LIMITS.menuMax} รายการ`, 'error');
-      }
       const imageVersion = state.tempImg ? Date.now() : 0;
       state.db.items.push({
         id: `ITM-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -2478,11 +2433,8 @@
     const parsed = Number(qs('config-unit-count')?.value || state.db.unitCount || 4);
     const safeParsed = Number.isFinite(parsed) ? parsed : Number(state.db.unitCount || 4);
     const rawCount = Math.min(200, Math.max(1, Math.floor(safeParsed)));
-    const count = state.isPro ? rawCount : Math.min(TRIAL_LIMITS.unitMax, rawCount);
+    const count = rawCount;
     const type = qs('config-unit-type')?.value || 'โต๊ะ';
-    if (!state.isPro && rawCount > TRIAL_LIMITS.unitMax) {
-      showToast(`รุ่นทดลองจำกัด ${TRIAL_LIMITS.unitMax} ${type}`, 'error');
-    }
     forceRebuildUnits(count, type);
     saveDb({ render: true, sync: true });
     showToast('อัปเดตจำนวนโต๊ะ/คิวแล้ว', 'success');
@@ -2518,7 +2470,6 @@
     if (qs('sys-bg')) qs('sys-bg').value = state.db.bgColor || '#f8fafc';
     if (qs('sys-bank')) qs('sys-bank').value = state.db.bank || '';
     if (qs('sys-ppay')) qs('sys-ppay').value = state.db.ppay || '';
-    if (qs('sys-pin')) qs('sys-pin').value = state.db.adminPin || '';
     if (qs('config-unit-type')) qs('config-unit-type').value = state.db.unitType || 'โต๊ะ';
     if (qs('config-unit-count')) qs('config-unit-count').value = String(state.db.unitCount || 4);
     if (qs('sys-promptpay-dynamic')) qs('sys-promptpay-dynamic').checked = isPromptPayDynamicEnabled();
@@ -2528,13 +2479,11 @@
   }
 
   function saveSystemSettings() {
-    const newPin = String(qs('sys-pin')?.value || '').trim();
     state.db.shopName = qs('sys-shop-name')?.value?.trim() || 'FAKDU';
     state.db.theme = qs('sys-theme')?.value || '#800000';
     state.db.bgColor = qs('sys-bg')?.value || '#f8fafc';
     state.db.bank = qs('sys-bank')?.value?.trim() || '';
     state.db.ppay = qs('sys-ppay')?.value?.trim() || '';
-    if (newPin) state.db.adminPin = newPin;
     if (!state.db.shopId) state.db.shopId = makeShopId();
     logOperation('SAVE_SYSTEM_SETTINGS', { shopName: state.db.shopName });
     applyTheme();
@@ -2666,7 +2615,6 @@
   }
 
   async function exportBackup() {
-    if (!state.isPro) return showToast('รุ่นทดลองไม่รองรับ Backup', 'error');
     const dbApi = resolveDbApi();
     const raw = dbApi.exportData ? await dbApi.exportData(state.db) : JSON.stringify(state.db, null, 2);
     const blob = new Blob([raw], { type: 'application/json' });
@@ -2738,7 +2686,6 @@
   }
 
   function executeRecovery() {
-    if (!state.isPro) return showToast('รุ่นทดลองยังไม่รองรับลืมรหัส Admin', 'error');
     const phone = qs('rec-ans-phone')?.value?.trim() || '';
     const color = qs('rec-ans-color')?.value || '';
     const animal = qs('rec-ans-animal')?.value || '';
@@ -2749,8 +2696,6 @@
       saveDb({ render: false, sync: false });
       return showToast('ข้อมูลช่วยจำไม่ตรง', 'error');
     }
-    state.db.adminPin = '1234';
-    if (qs('sys-pin')) qs('sys-pin').value = '1234';
     closeModal('modal-recovery');
     if (qs('rec-ans-phone')) qs('rec-ans-phone').value = '';
     if (qs('rec-ans-color')) qs('rec-ans-color').selectedIndex = 0;
@@ -2784,22 +2729,12 @@
   }
 
   function applyTrialUiGuards() {
-    if (state.isPro) return;
-    if ((state.db.unitCount || 0) > TRIAL_LIMITS.unitMax) {
-      forceRebuildUnits(TRIAL_LIMITS.unitMax, state.db.unitType || 'โต๊ะ');
-    }
-    if (state.db.items.length > TRIAL_LIMITS.menuMax) {
-      state.db.items = state.db.items.slice(0, TRIAL_LIMITS.menuMax);
-    }
-    if (Array.isArray(state.db.sync.clients) && state.db.sync.clients.length > TRIAL_LIMITS.onlineClientMax) {
-      state.db.sync.clients = state.db.sync.clients.slice(0, TRIAL_LIMITS.onlineClientMax);
-    }
     const unitInput = qs('config-unit-count');
-    if (unitInput) unitInput.max = String(TRIAL_LIMITS.unitMax);
+    if (unitInput) unitInput.removeAttribute('max');
     const addMenuBtn = qs('btn-add-menu-item');
-    if (addMenuBtn) addMenuBtn.disabled = state.db.items.length >= TRIAL_LIMITS.menuMax;
+    if (addMenuBtn) addMenuBtn.disabled = false;
     const backupBtn = qs('btn-export-backup');
-    if (backupBtn) backupBtn.disabled = true;
+    if (backupBtn) backupBtn.disabled = false;
   }
   //* pro/vault close
 
@@ -3502,9 +3437,6 @@
     const activeVersion = Number(state.db.sync.syncVersion || 1);
     if (normalized.syncVersion !== activeVersion) return;
 
-    if (!state.isPro && state.db.sync.clients.filter((row) => row.approved).length >= TRIAL_LIMITS.onlineClientMax) {
-      return;
-    }
 
     const existing = state.db.sync.approvals.find((row) => row.clientId === clientId);
     const isNewRequest = !existing;
@@ -3803,10 +3735,6 @@
   }
 
   function approveClientWithMode(clientId, forcedMode = null) {
-    if (!state.isPro && state.db.sync.clients.filter((row) => row.approved).length >= TRIAL_LIMITS.onlineClientMax) {
-      showToast(`รุ่นทดลองจำกัดอุปกรณ์เสริม ${TRIAL_LIMITS.onlineClientMax} เครื่อง`, 'error');
-      return;
-    }
 
     const approval = state.db.sync.approvals.find((row) => row.clientId === clientId);
     if (!approval) return;
@@ -4062,17 +3990,17 @@
   }
 
   function requestNewSyncKey() {
-    if (!state.isAdminLoggedIn || state.activeTab !== 'system') {
-      showToast('รีเซ็ต PIN ได้เฉพาะโหมดระบบ', 'error');
+    if (state.activeTab !== 'system') {
+      showToast('รีเซ็ต PIN ได้เฉพาะหน้าโหมดระบบ', 'error');
       return;
     }
     openModal('modal-sync-key-confirm');
   }
 
   async function confirmNewSyncKey() {
-    if (!state.isAdminLoggedIn || state.activeTab !== 'system') {
+    if (state.activeTab !== 'system') {
       closeModal('modal-sync-key-confirm');
-      showToast('รีเซ็ต PIN ได้เฉพาะโหมดระบบ', 'error');
+      showToast('รีเซ็ต PIN ได้เฉพาะหน้าโหมดระบบ', 'error');
       return;
     }
     const today = getLocalYYYYMMDD();
@@ -4501,17 +4429,18 @@
   }
 
   function syncModalPinToHiddenInput() {
-    const modalPinInput = qs('manual-pin-visible');
+    const visiblePinInput = qs('manual-pin-visible');
     const hiddenPinInput = qs('manual-pin');
-    if (!modalPinInput || !hiddenPinInput) return '';
-    hiddenPinInput.value = String(modalPinInput.value || '').trim();
+    if (!visiblePinInput || !hiddenPinInput) return '';
+    hiddenPinInput.value = String(visiblePinInput.value || '').trim();
     return hiddenPinInput.value;
   }
 
   function openStaffLinkModal() {
-    const modalPinInput = qs('manual-pin-visible');
-    const hiddenPinInput = qs('manual-pin');
-    if (modalPinInput && hiddenPinInput) modalPinInput.value = String(hiddenPinInput.value || '').trim();
+    if (isRestrictedStaffMode()) {
+      showToast('โหมดเชื่อมต่ออยู่ที่เครื่องพนักงาน', 'click');
+      return;
+    }
     updateSyncUi();
     openModal('modal-staff-link');
   }
@@ -4738,12 +4667,6 @@
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
-    if (event.key === 'Enter' && target.id === 'admin-pin-input') {
-      event.preventDefault();
-      verifyAdminPin();
-      return;
-    }
-
     if (event.key === 'Enter' && (target.id === 'manual-pin' || target.id === 'manual-pin-visible')) {
       event.preventDefault();
       submitClientAccessRequestFromModal();
@@ -4811,10 +4734,6 @@
     deleteMemberFromSystem,
     resetMemberForm,
     openRecoveryModal: () => {
-      if (!state.isPro) {
-        showToast('รุ่นทดลองยังไม่รองรับลืมรหัส Admin', 'error');
-        return;
-      }
       if (qs('rec-ans-phone')) qs('rec-ans-phone').value = '';
       if (qs('rec-ans-color')) qs('rec-ans-color').selectedIndex = 0;
       if (qs('rec-ans-animal')) qs('rec-ans-animal').selectedIndex = 0;
