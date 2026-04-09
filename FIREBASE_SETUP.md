@@ -2,6 +2,17 @@
 
 ไฟล์นี้เพิ่มค่าเริ่มต้นสำหรับ Realtime Database rules ที่ระบบ sync ใช้งาน
 
+
+## Security note (สำคัญ)
+- Rules ชุดนี้ออกแบบให้ใช้งานแบบ **PIN-based pairing** (ยังไม่บังคับ Firebase Auth)
+- ฝั่งลูกจะเข้าระบบได้เมื่อมี PIN/QR จากเครื่องแม่เท่านั้น
+- ถ้าสงสัยว่ามีเครื่องไม่พึงประสงค์เข้ามา ให้รีเซ็ต PIN ที่เครื่องแม่ทันที
+
+อัปเดตล่าสุดของ rules เพิ่ม validation ให้เข้มขึ้น เช่น
+- บังคับ `syncPins/$pin.pin` ต้องตรงกับ `$pin`
+- บังคับ `shops/$shopId/meta.shopId` ต้องตรงกับ `$shopId`
+- ตรวจชนิดข้อมูลหลัก (`syncVersion`, `sentAt`, `approved`)
+
 ## 1) ติดตั้ง Firebase CLI
 ```bash
 npm i -g firebase-tools
@@ -42,4 +53,4 @@ python3 scripts/check_firebase_api_contract.py
 
 > หมายเหตุ: rules ชุดนี้เป็น baseline ให้ระบบทำงานได้ทันทีตาม path ที่แอป sync เรียกใช้
 > (`syncPins`, `joinRequests`, `clientApprovals`, `shops/*`).
-> ถ้าร้านต้องการความปลอดภัยเพิ่ม ให้ผูก Firebase Auth แล้วคุม `.read/.write` ด้วย `auth != null` เพิ่มเติม
+> ถ้าร้านต้องการยกระดับความปลอดภัยอีกขั้น ค่อยเพิ่ม Firebase Auth ภายหลังได้
