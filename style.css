@@ -746,6 +746,17 @@ hr {
   box-shadow: var(--shadow-sm);
 }
 
+#review-list {
+  gap: 4px;
+}
+
+#review-list > * {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 #shop-request-count,
 #menu-count,
 #client-approval-count,
