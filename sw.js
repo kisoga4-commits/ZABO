@@ -37,12 +37,6 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-self.addEventListener('message', (event) => {
-  if (event?.data?.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
 async function stampCacheEntry(request) {
   const metaCache = await caches.open(META_CACHE_NAME);
   await metaCache.put(request.url, new Response(String(Date.now())));
