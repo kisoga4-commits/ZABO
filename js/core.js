@@ -144,7 +144,8 @@
     lastLocalServerBackupAt: 0,
     lastLocalServerSeenSavedAt: 0,
     lastLocalServerSyncToastAt: 0,
-    isApplyingLocalServerSnapshot: false
+    isApplyingLocalServerSnapshot: false,
+    qrRenderToken: 0
   };
   const IS_CLIENT_NODE = false;
   //* constants close
@@ -208,20 +209,21 @@
     return Number(n || 0).toLocaleString('th-TH');
   }
   function toPromptPayTarget(raw = '') {
-    const digits = String(raw || '').replace(/[^\d+]/g, '').replace(/\+/g, '');
-    if (digits.length === 11 && digits.startsWith('66')) {
-      return { type: '01', value: `0066${digits.slice(2)}` }; // mobile in +66 / 66 format
-    }
+    const digits = String(raw || '').replace(/\D/g, '');
     if (digits.length === 10 && digits.startsWith('0')) {
       return { type: '01', value: `0066${digits.slice(1)}` }; // mobile
     }
     if (digits.length === 13) {
-      return { type: '02', value: digits }; // national id / tax id
-    }
-    if (digits.length === 15) {
-      return { type: '03', value: digits }; // e-wallet id
+      return { type: '02', value: digits }; // citizen/tax id
     }
     return null;
+  }
+  function getPromptPayValidationMessage(raw = '') {
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return 'ไม่มีเลขพร้อมเพย์';
+    if (digits.length === 10 && digits.startsWith('0')) return '';
+    if (digits.length === 13) return '';
+    return 'รูปแบบพร้อมเพย์ไม่รองรับ (รองรับเฉพาะเบอร์มือถือ 10 หลักขึ้นต้น 0 หรือเลข 13 หลัก)';
   }
   function emvField(id, value) {
     const text = String(value ?? '');
@@ -283,6 +285,18 @@
     if (img.complete) ctx.drawImage(img, 0, 0, w, h);
     else img.onload = () => ctx.drawImage(img, 0, 0, w, h);
     return fallbackCanvas;
+  }
+  function makeOnlineDynamicQrImage(payload = '', options = {}) {
+    if (!payload) return null;
+    const size = Math.max(120, Number(options.size || 150));
+    const img = document.createElement('img');
+    img.alt = 'PromptPay Dynamic QR';
+    img.width = size;
+    img.height = size;
+    img.className = 'mx-auto rounded-lg border bg-white';
+    const url = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(payload)}`;
+    img.src = url;
+    return img;
   }
   function isTransferMethod(method = '') {
     const value = String(method || '').toLowerCase();
@@ -1735,7 +1749,7 @@
     if (qs('checkout-total')) qs('checkout-total').textContent = formatMoney(total);
     resetCheckoutMemberInputs();
     if (list) {
-      list.innerHTML = unit.orders.map((row, index) => `
+      const orderRowsHtml = unit.orders.map((row, index) => `
         <div class="flex justify-between items-center gap-3 py-3">
           <div class="min-w-0 flex-1">
             <div class="font-black text-gray-800 truncate">${escapeHtml(row.name)}</div>
@@ -1748,12 +1762,80 @@
           </div>
         </div>
       `).join('');
+      const redeemableItems = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
+      const redeemRowsHtml = redeemableItems.length ? `
+        <div class="pt-3 mt-2 border-t border-dashed">
+          <div class="text-[10px] font-black text-emerald-700 mb-2">🎁 แลกแต้ม (อยู่ในรายการเช็คบิล)</div>
+          <div class="space-y-2">
+            ${redeemableItems.map((item) => `
+              <div class="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-2.5 py-2">
+                <div class="flex-1 min-w-0">
+                  <div class="text-[11px] font-black text-emerald-800 truncate">${escapeHtml(item.name)}</div>
+                  <div class="text-[10px] font-bold text-emerald-700">ใช้ ${formatMoney(item.redeemPoints)} แต้ม</div>
+                </div>
+                <button onclick="addRedeemItemFromCheckout('${escapeHtml(item.id)}')" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black active:scale-95">+ เพิ่ม</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : '';
+      list.innerHTML = `${orderRowsHtml}${redeemRowsHtml}`;
     }
     updateQrDisplay();
     openModal('modal-checkout');
     const paymentButtons = qs('checkout-payment-buttons');
     if (paymentButtons) paymentButtons.classList.toggle('hidden', IS_CLIENT_NODE);
     renderShopQueue();
+  }
+
+  function addRedeemItemFromCheckout(itemId) {
+    const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
+    if (!unit) return;
+    const item = state.db.items.find((row) => String(row.id) === String(itemId));
+    if (!item || Number(item.redeemPoints || 0) <= 0) {
+      showToast('เมนูนี้ยังไม่เปิดแลกแต้ม', 'error');
+      return;
+    }
+    const member = getCheckoutResolvedMember();
+    if (!member) {
+      showToast('กรุณากรอกเบอร์โทรหรือชื่อสมาชิกก่อนแลกแต้ม', 'error');
+      return;
+    }
+    const usedPoints = unit.orders.reduce((sum, row) => {
+      if (!row || !row.redeemedByPoints) return sum;
+      return sum + Math.max(0, Number(row.redeemPoints || 0)) * Math.max(1, Number(row.qty || 1));
+    }, 0);
+    const needPoints = Math.max(0, Number(item.redeemPoints || 0));
+    if ((usedPoints + needPoints) > Math.max(0, Number(member.points || 0))) {
+      showToast('แต้มสมาชิกไม่พอสำหรับรายการนี้', 'error');
+      return;
+    }
+    unit.orders.push({
+      id: `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      itemId: item.id,
+      baseName: item.name,
+      name: `${item.name} (แลกแต้ม)`,
+      qty: 1,
+      price: 0,
+      total: 0,
+      addons: [],
+      note: '',
+      source: IS_CLIENT_NODE ? 'client' : 'master',
+      orderBy: getCurrentProfileName(),
+      createdAt: Date.now(),
+      redeemedByPoints: true,
+      redeemPoints: needPoints
+    });
+    unit.lastActivityAt = Date.now();
+    logOperation('ADD_REDEEM_ITEM_FROM_CHECKOUT', {
+      unitId: unit.id,
+      memberId: member.id,
+      itemId: item.id,
+      points: needPoints
+    });
+    saveDb({ render: true, sync: true });
+    openCheckout(unit.id);
+    showToast(`เพิ่ม ${item.name} (แลก ${formatMoney(needPoints)} แต้ม) แล้ว`, 'success');
   }
 
   function getCheckoutResolvedMember() {
@@ -1837,62 +1919,82 @@
     showToast(`เพิ่มเมนูแลกแต้มให้ ${member.name || member.phone || 'สมาชิก'} แล้ว (${formatMoney(totalNeed)} แต้ม)`, 'success');
   }
 
-  function updateQrDisplay() {
+  async function updateQrDisplay() {
     const offlineImg = qs('qr-offline-img');
     const genArea = qs('qr-gen-area');
     const status = qs('qr-status-text');
     if (!offlineImg || !genArea || !status) return;
+    const renderToken = Date.now();
+    state.qrRenderToken = renderToken;
+    const setStatus = (text = '') => {
+      status.textContent = text;
+    };
+    const setError = (text = '') => {
+      genArea.classList.remove('hidden');
+      genArea.innerHTML = `<div class="text-xs text-red-500 font-bold text-center">${escapeHtml(text)}</div>`;
+      setStatus(text);
+    };
     genArea.innerHTML = '';
-    status.textContent = '';
+    setStatus('');
     const isDynamicEnabled = isPromptPayDynamicEnabled();
     offlineImg.classList.add('hidden');
     genArea.classList.add('hidden');
-
-    const payload = buildPromptPayPayload(state.db.ppay, state.currentCheckoutTotal, state.db.shopName);
-    const qrCanvas = generatePromptPayQrCanvas(state.db.ppay, state.currentCheckoutTotal, {
-      width: 150,
-      height: 150,
-      shopName: state.db.shopName
-    });
 
     if (!isDynamicEnabled) {
       if (state.db.qrOffline) {
         offlineImg.src = state.db.qrOffline;
         offlineImg.classList.remove('hidden');
-        status.textContent = state.db.bank && state.db.ppay ? `${state.db.bank} • ${state.db.ppay} (Static)` : 'ใช้ QR ที่ร้านอัปไว้ (Static)';
+        setStatus('ใช้ QR static');
         return;
       }
-      if (qrCanvas && payload) {
-        genArea.classList.remove('hidden');
-        genArea.appendChild(qrCanvas);
-        status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Auto Dynamic)`;
-        return;
-      }
-      genArea.classList.remove('hidden');
-      genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่มี QR แบบภาพนิ่ง และสร้าง Dynamic ไม่ได้<br>กรุณาใส่พร้อมเพย์หรืออัปโหลด QR</div>';
-      status.textContent = 'โหมด Static: ยังไม่มี QR พร้อมใช้งาน';
+      setError('ไม่มี QR static');
       return;
     }
 
+    const validationError = getPromptPayValidationMessage(state.db.ppay);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    const payload = buildPromptPayPayload(state.db.ppay, state.currentCheckoutTotal, state.db.shopName);
+    if (!payload) {
+      setError('ไม่มี payload เพราะข้อมูลไม่ครบ');
+      return;
+    }
+
+    const qrCanvas = generatePromptPayQrCanvas(state.db.ppay, state.currentCheckoutTotal, {
+      width: 150,
+      height: 150,
+      shopName: state.db.shopName
+    });
     genArea.classList.remove('hidden');
     if (qrCanvas && payload) {
       genArea.appendChild(qrCanvas);
-      status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic)`;
+      setStatus('ใช้ QR dynamic');
       return;
     }
 
-    if (state.db.qrOffline) {
-      offlineImg.src = state.db.qrOffline;
-      offlineImg.classList.remove('hidden');
-      status.textContent = state.db.bank && state.db.ppay
-        ? `${state.db.bank} • ${state.db.ppay} (Fallback Static)`
-        : 'Dynamic ไม่พร้อม ใช้ QR ภาพนิ่งแทน';
+    if (!navigator.onLine) {
+      setError('สร้าง QR ไม่ได้เพราะไม่มี QR generator / ไม่มีอินเทอร์เน็ต');
       return;
     }
-    genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่สามารถสร้าง QR Dynamic ได้<br>กรุณาอัปโหลด QR Static ในหน้าระบบเพื่อใช้งานผ่าน LAN</div>';
-    status.textContent = typeof QRCode !== 'function'
-      ? 'ไม่พบตัวสร้าง QR ในเว็บ (QRCode lib) กรุณาอัปโหลด QR Static'
-      : 'ไม่มี QR พร้อมใช้งาน';
+
+    const onlineImg = makeOnlineDynamicQrImage(payload, { size: 150 });
+    if (!onlineImg) {
+      setError('fallback online ใช้ไม่ได้');
+      return;
+    }
+    onlineImg.onload = () => {
+      if (state.qrRenderToken !== renderToken) return;
+      genArea.innerHTML = '';
+      genArea.appendChild(onlineImg);
+      setStatus('ใช้ QR dynamic ผ่าน online fallback');
+    };
+    onlineImg.onerror = () => {
+      if (state.qrRenderToken !== renderToken) return;
+      setError('fallback online ใช้ไม่ได้');
+    };
+    genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">กำลังสร้าง QR dynamic ผ่าน online fallback...</div>';
   }
 
   function deleteOrderItem(index) {
@@ -2679,6 +2781,7 @@
     logOperation('SAVE_SYSTEM_SETTINGS', { shopName: state.db.shopName });
     applyTheme();
     saveDb({ render: true, sync: true });
+    if (qs('modal-checkout') && !qs('modal-checkout').classList.contains('hidden')) updateQrDisplay();
     showToast('บันทึกการตั้งค่าแล้ว', 'success');
   }
 
@@ -4934,6 +5037,13 @@
         if (qs('modal-checkout') && !qs('modal-checkout').classList.contains('hidden')) updateQrDisplay();
       });
     }
+    ['sys-ppay', 'sys-bank', 'sys-shop-name'].forEach((id) => {
+      const el = qs(id);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        if (qs('modal-checkout') && !qs('modal-checkout').classList.contains('hidden')) updateQrDisplay();
+      });
+    });
     document.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
@@ -4982,6 +5092,7 @@
     lookupCheckoutMember,
     applyCheckoutMemberLookup,
     openRedeemPointsModal,
+    addRedeemItemFromCheckout,
     applyRedeemPointsSelection,
     toggleCheckoutMemberSection,
     markCheckoutMemberDirty,
