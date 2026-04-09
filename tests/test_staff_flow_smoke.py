@@ -42,6 +42,17 @@ class StaffFlowSmokeTest(unittest.TestCase):
         conn.close()
         return res.status, headers, body
 
+    def current_latest_saved_at(self) -> int:
+        status, _, body = self.request("GET", "/api/local-db")
+        if status != 200:
+            return 0
+        payload = json.loads(body.decode("utf-8", errors="ignore"))
+        data = payload.get("data", {}) if isinstance(payload, dict) else {}
+        try:
+            return int(data.get("savedAt") or 0)
+        except Exception:
+            return 0
+
     def test_home_contains_dual_staff_access_mode(self):
         status, _, body = self.request("GET", "/")
         self.assertEqual(status, 200)
@@ -70,16 +81,16 @@ class StaffFlowSmokeTest(unittest.TestCase):
         self.assertIn("mode%3Dstaff", html)
 
     def test_local_db_rejects_stale_saved_at_overwrite(self):
-        base = int(time.time() * 1000)
+        base = max(int(time.time() * 1000), self.current_latest_saved_at() + 10)
         newer = {
-            "savedAt": base + 2000,
+            "savedAt": base + 20,
             "appVersion": "test",
             "sourceDeviceId": "MASTER",
             "sourceMode": "master",
             "db": {"shopName": "NEWER"},
         }
         older = {
-            "savedAt": base + 1000,
+            "savedAt": base + 10,
             "appVersion": "test",
             "sourceDeviceId": "STAFF",
             "sourceMode": "staff",
@@ -100,6 +111,37 @@ class StaffFlowSmokeTest(unittest.TestCase):
         self.assertEqual(status, 200)
         payload = json.loads(body.decode("utf-8", errors="ignore"))
         self.assertEqual(payload.get("data", {}).get("db", {}).get("shopName"), "NEWER")
+
+    def test_local_db_allows_newer_app_version_even_if_saved_at_lower(self):
+        base = max(int(time.time() * 1000), self.current_latest_saved_at() + 10)
+        latest = {
+            "savedAt": base + 50,
+            "appVersion": "999999999.0.0",
+            "sourceDeviceId": "MASTER",
+            "sourceMode": "master",
+            "db": {"shopName": "OLD-VERSION"},
+        }
+        newer_version = {
+            "savedAt": base + 10,
+            "appVersion": "1000000000.0.0",
+            "sourceDeviceId": "MASTER",
+            "sourceMode": "master",
+            "db": {"shopName": "NEW-VERSION"},
+        }
+        status, _, body = self.request_json("POST", "/api/local-db", latest)
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode("utf-8", errors="ignore"))
+        self.assertTrue(payload.get("saved"))
+
+        status, _, body = self.request_json("POST", "/api/local-db", newer_version)
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode("utf-8", errors="ignore"))
+        self.assertTrue(payload.get("saved"))
+
+        status, _, body = self.request("GET", "/api/local-db")
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode("utf-8", errors="ignore"))
+        self.assertEqual(payload.get("data", {}).get("db", {}).get("shopName"), "NEW-VERSION")
 
 
 if __name__ == "__main__":
