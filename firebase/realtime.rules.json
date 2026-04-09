@@ -64,6 +64,18 @@
             ".read": true,
             ".write": true
           }
+        },
+        "clients": {
+          "$clientId": {
+            ".read": true,
+            ".write": true
+          }
+        },
+        "members": {
+          "$memberId": {
+            ".read": true,
+            ".write": true
+          }
         }
       }
     }
