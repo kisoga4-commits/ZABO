@@ -226,6 +226,48 @@ class FakduHandler(SimpleHTTPRequestHandler):
         except sqlite3.Error:
             return
 
+    @staticmethod
+    def _to_saved_at(value) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return 0
+
+    @staticmethod
+    def _read_latest_saved_at() -> int:
+        if not LOCAL_DB_FILE.exists():
+            return 0
+        try:
+            raw = json.loads(LOCAL_DB_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return 0
+        return FakduHandler._to_saved_at(raw.get("savedAt"))
+
+    @staticmethod
+    def _version_rank(value) -> tuple[int, ...]:
+        text = str(value or "").strip().lower()
+        if not text:
+            return tuple()
+        cleaned = text.replace("v", ".")
+        parts = []
+        for chunk in cleaned.replace("-", ".").split("."):
+            if not chunk:
+                continue
+            digits = "".join(ch for ch in chunk if ch.isdigit())
+            if digits:
+                parts.append(int(digits))
+        return tuple(parts)
+
+    @staticmethod
+    def _read_latest_meta() -> dict:
+        if not LOCAL_DB_FILE.exists():
+            return {}
+        try:
+            raw = json.loads(LOCAL_DB_FILE.read_text(encoding="utf-8"))
+            return raw if isinstance(raw, dict) else {}
+        except Exception:
+            return {}
+
     def _staff_url(self) -> str:
         return f"{self._base_url()}/?{urlencode({'mode': 'staff'})}"
 
@@ -257,16 +299,17 @@ class FakduHandler(SimpleHTTPRequestHandler):
         if path == "/api/local-db":
             self._prune_old_local_db_files()
             payload = {"ok": True, "data": None, "exists": False}
-            sqlite_payload = self._read_latest_sqlite_payload()
-            if sqlite_payload is not None:
-                payload["data"] = sqlite_payload
-                payload["exists"] = True
-            elif LOCAL_DB_FILE.exists():
+            if LOCAL_DB_FILE.exists():
                 try:
                     payload["data"] = json.loads(LOCAL_DB_FILE.read_text(encoding="utf-8"))
                     payload["exists"] = True
                 except Exception:
                     payload = {"ok": False, "exists": True, "error": "INVALID_LOCAL_DB_FILE"}
+            else:
+                sqlite_payload = self._read_latest_sqlite_payload()
+                if sqlite_payload is not None:
+                    payload["data"] = sqlite_payload
+                    payload["exists"] = True
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -366,6 +409,30 @@ class FakduHandler(SimpleHTTPRequestHandler):
             "sourceMode": payload.get("sourceMode"),
             "db": data
         }
+
+        incoming_saved_at = self._to_saved_at(safe_payload.get("savedAt"))
+        latest_meta = self._read_latest_meta()
+        latest_saved_at = self._to_saved_at(latest_meta.get("savedAt"))
+        incoming_rank = self._version_rank(safe_payload.get("appVersion"))
+        latest_rank = self._version_rank(latest_meta.get("appVersion"))
+
+        if latest_saved_at and incoming_saved_at and incoming_saved_at < latest_saved_at and not (incoming_rank and latest_rank and incoming_rank > latest_rank):
+            body = json.dumps({
+                "ok": True,
+                "saved": False,
+                "ignored": True,
+                "reason": "STALE_SNAPSHOT",
+                "latestSavedAt": latest_saved_at,
+                "incomingSavedAt": incoming_saved_at,
+            }, ensure_ascii=False).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         LOCAL_DB_FILE.write_text(json.dumps(safe_payload, ensure_ascii=False), encoding="utf-8")
         digest = self._make_backup_digest(safe_payload)
         if self._should_write_backup(digest):

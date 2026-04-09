@@ -750,6 +750,90 @@ hr {
   box-shadow: var(--shadow-sm);
 }
 
+#modal-review #review-list {
+  display: block;
+  gap: 0;
+}
+
+#modal-review #review-list > * {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.review-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+}
+
+.review-item-main {
+  min-width: 0;
+}
+
+.review-item-name {
+  font-weight: 900;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.review-item-price {
+  margin-top: 2px;
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.review-item-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 2px 4px;
+}
+
+.review-qty-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #374151;
+  font-weight: 900;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.review-qty {
+  min-width: 16px;
+  text-align: center;
+  font-weight: 900;
+  font-size: 12px;
+  color: #111827;
+}
+
+.review-item-total {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--theme-primary, #111827);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.review-item-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 0 2px;
+}
+
 #shop-request-count,
 #menu-count,
 #client-approval-count,
@@ -936,7 +1020,6 @@ hr {
 #modal-recovery-setup,
 #modal-menu-form,
 #modal-addon-select,
-#modal-pro-unlock,
 #modal-review,
 #modal-checkout,
 #modal-sales-insight,
@@ -962,7 +1045,6 @@ hr {
 #modal-recovery-setup.open,
 #modal-menu-form.open,
 #modal-addon-select.open,
-#modal-pro-unlock.open,
 #modal-review.open,
 #modal-checkout.open,
 #modal-sales-insight.open,
@@ -981,7 +1063,6 @@ hr {
 #modal-recovery-setup > *,
 #modal-menu-form > *,
 #modal-addon-select > *,
-#modal-pro-unlock > *,
 #modal-review > *,
 #modal-checkout > *,
 #modal-sales-insight > *,
@@ -1045,7 +1126,6 @@ hr {
 
 #admin-pin-input,
 #manual-pin,
-#pro-key-input,
 #rec-ans-phone,
 #setup-rec-phone,
 #form-menu-name,
@@ -1311,7 +1391,6 @@ hr {
   #modal-recovery-setup > *,
   #modal-menu-form > *,
   #modal-addon-select > *,
-  #modal-pro-unlock > *,
   #modal-review > *,
   #modal-checkout > *,
   #modal-client-entry > *,

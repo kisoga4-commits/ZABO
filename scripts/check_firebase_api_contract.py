@@ -14,6 +14,9 @@ ADAPTER = ROOT / 'js' / 'firebase-sync.js'
 
 def main() -> int:
     core_text = CORE.read_text(encoding='utf-8')
+    if not ADAPTER.exists():
+        print("ℹ️ SKIP: firebase-sync adapter not found (LAN-only mode).")
+        return 0
     adapter_text = ADAPTER.read_text(encoding='utf-8')
 
     used = set(re.findall(r'\bapi\.([A-Za-z_][A-Za-z0-9_]*)\(', core_text))
