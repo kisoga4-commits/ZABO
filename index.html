@@ -229,18 +229,17 @@
                 <div class="flex items-start justify-between gap-3 mb-4">
                     <div>
                         <h3 class="font-black text-sm text-emerald-700">🎁 เมนูที่ใช้สิทธิ์แลกแต้มได้</h3>
-                        <p class="text-[10px] text-gray-500 font-bold mt-1">เพิ่ม/แก้ไข/ลบสิทธิ์แลกแต้มได้เฉพาะบางเมนู (ไม่จำเป็นต้องทุกเมนู)</p>
+                        <p class="text-[10px] text-gray-500 font-bold mt-1">ติ๊กเพื่อเปิดสิทธิ์ และกำหนดแต้มที่ใช้ต่อชิ้นได้ทันที</p>
                     </div>
                     <div class="text-right text-[10px] font-black text-gray-500">
                         <div>ใช้สิทธิ์ได้: <span id="redeem-eligible-count" class="text-emerald-700">0</span></div>
                         <div>ยังไม่เปิดสิทธิ์: <span id="redeem-disabled-count" class="text-gray-700">0</span></div>
                     </div>
                 </div>
-                <div id="redeem-eligible-list" class="space-y-2 mb-4"></div>
-                <div class="border-t pt-4">
-                    <div class="text-[10px] text-gray-500 font-black uppercase mb-2">เมนูที่ยังไม่ได้เปิดสิทธิ์แลกแต้ม</div>
-                    <div id="redeem-disabled-list" class="space-y-2"></div>
+                <div class="bg-amber-50 border border-amber-100 text-amber-700 text-[10px] font-black rounded-xl p-3 mb-3">
+                    หากติ๊กเปิดสิทธิ์ ต้องใส่แต้มมากกว่า 0
                 </div>
+                <div id="redeem-config-list" class="space-y-2"></div>
             </div>
         </div>
     </section>
@@ -330,19 +329,26 @@
             </div>
         </div>
 
-        <div class="bg-white p-5 rounded-[24px] border shadow-sm mb-6">
-            <div class="flex items-start justify-between gap-3 mb-4">
-                <div>
-                    <h3 class="font-black text-base text-slate-800">📲 เชื่อมเครื่องพนักงาน</h3>
-                    <p class="text-[10px] text-slate-500 font-bold">ให้เครื่องพนักงานสแกน QR เพื่อเข้าใช้งานระบบ หรือกรอก PIN 6 หลัก</p>
+            <div class="bg-white p-5 rounded-[24px] border shadow-sm mb-6">
+                <div class="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                        <h3 class="font-black text-base text-slate-800">📲 เชื่อมเครื่องพนักงาน</h3>
+                        <p class="text-[10px] text-slate-500 font-bold">ให้เครื่องพนักงานสแกน QR หรือกรอก PIN 6 หลัก และเลือกโหมดใช้งาน (ลูกค้า/เช็คบิล)</p>
+                    </div>
+                    <button onclick="openClientScanner()" class="px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-black active:scale-95">📷 สแกน QR</button>
                 </div>
-                <button onclick="openClientScanner()" class="px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-black active:scale-95">📷 สแกน QR</button>
+                <div class="mb-2">
+                    <label class="text-[10px] text-gray-500 font-black uppercase block mb-1">โหมดเครื่องพนักงาน</label>
+                    <select id="client-access-mode" class="w-full border-2 p-3 rounded-xl text-sm font-black bg-gray-50 outline-none focus:border-primary">
+                        <option value="customer">โหมดลูกค้า (รับออเดอร์)</option>
+                        <option value="shop">โหมดเช็คบิล</option>
+                    </select>
+                </div>
+                <div class="flex gap-2">
+                    <input id="manual-pin" type="text" maxlength="6" inputmode="numeric" placeholder="กรอก PIN 6 หลัก" class="flex-1 border-2 p-3 rounded-xl text-sm font-black bg-gray-50 outline-none focus:border-primary tracking-[0.2em] uppercase text-center">
+                    <button onclick="submitClientAccessRequest()" class="px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-black active:scale-95">เชื่อมต่อ</button>
+                </div>
             </div>
-            <div class="flex gap-2">
-                <input id="manual-pin" type="text" maxlength="6" inputmode="numeric" placeholder="กรอก PIN 6 หลัก" class="flex-1 border-2 p-3 rounded-xl text-sm font-black bg-gray-50 outline-none focus:border-primary tracking-[0.2em] uppercase text-center">
-                <button onclick="submitClientAccessRequest()" class="px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-black active:scale-95">เชื่อมต่อ</button>
-            </div>
-        </div>
 
         <div class="bg-white p-5 rounded-[24px] border shadow-sm mb-6">
             <div class="flex items-start justify-between gap-3 mb-4">
