@@ -93,6 +93,24 @@
     topBasicMax: 3,
     themePalette: ['#800000', '#1d4ed8', '#0f766e', '#b45309', '#111827']
   };
+  function resolveClientNodeFlag() {
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      const mode = String(params.get('mode') || '').trim().toLowerCase();
+      const role = String(params.get('role') || '').trim().toLowerCase();
+      const hasPin = normalizeSyncPin(params.get('pin') || params.get('syncPin') || '').length === 6;
+      const forceClientMode = localStorage.getItem(LS_FORCE_CLIENT_MODE) === 'true';
+      const rawSession = localStorage.getItem('FAKDU_CLIENT_SESSION');
+      const hasClientSession = !!(rawSession && JSON.parse(rawSession || '{}')?.clientSessionToken);
+
+      if (mode === 'client' || role === 'client' || mode === 'node' || role === 'node') return true;
+      if (forceClientMode || hasClientSession) return true;
+      if (hasPin && (mode === 'staff' || mode === 'employee' || role === 'staff' || role === 'employee')) return true;
+      return false;
+    } catch (_) {
+      return localStorage.getItem(LS_FORCE_CLIENT_MODE) === 'true';
+    }
+  }
   const state = {
     db: structuredClone(DEFAULT_DB),
     isAdminLoggedIn: localStorage.getItem(LS_ADMIN) === 'true',
@@ -143,9 +161,10 @@
     lastLocalServerBackupAt: 0,
     lastLocalServerSeenSavedAt: 0,
     lastLocalServerSyncToastAt: 0,
-    isApplyingLocalServerSnapshot: false
+    isApplyingLocalServerSnapshot: false,
+    qrRenderTicket: 0
   };
-  const IS_CLIENT_NODE = false;
+  const IS_CLIENT_NODE = resolveClientNodeFlag();
   //* constants close
 
   //* adapter open
@@ -208,19 +227,25 @@
   }
   function toPromptPayTarget(raw = '') {
     const digits = String(raw || '').replace(/[^\d+]/g, '').replace(/\+/g, '');
-    if (digits.length === 11 && digits.startsWith('66')) {
-      return { type: '01', value: `0066${digits.slice(2)}` }; // mobile in +66 / 66 format
-    }
     if (digits.length === 10 && digits.startsWith('0')) {
       return { type: '01', value: `0066${digits.slice(1)}` }; // mobile
     }
     if (digits.length === 13) {
       return { type: '02', value: digits }; // national id / tax id
     }
-    if (digits.length === 15) {
-      return { type: '03', value: digits }; // e-wallet id
-    }
     return null;
+  }
+  function getPromptPayFormatError(raw = '') {
+    const cleaned = String(raw || '').replace(/\D/g, '');
+    if (!cleaned) return 'ยังไม่ได้กรอกเลขพร้อมเพย์';
+    if (cleaned.length === 10 && cleaned.startsWith('0')) return '';
+    if (cleaned.length === 13) return '';
+    if (cleaned.length === 10 && !cleaned.startsWith('0')) return 'เบอร์พร้อมเพย์ต้องขึ้นต้นด้วย 0';
+    return 'รองรับเฉพาะเบอร์มือถือ 10 หลัก (ขึ้นต้น 0) หรือเลข 13 หลักเท่านั้น';
+  }
+  function getPromptPayDynamicQrFallbackUrl(payload = '') {
+    if (!payload) return '';
+    return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=1&data=${encodeURIComponent(payload)}`;
   }
   function emvField(id, value) {
     const text = String(value ?? '');
@@ -533,7 +558,12 @@
     return `MSG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
   }
   function resolveFirebaseSyncApi() {
-    // LAN-first deployment: disable cloud adapter to keep runtime lean and offline-safe.
+    if (state.firebaseSyncApi) return state.firebaseSyncApi;
+    const api = window.FakduSyncApi || window.fakduSyncApi || null;
+    if (api && typeof api === 'object') {
+      state.firebaseSyncApi = api;
+      return state.firebaseSyncApi;
+    }
     return null;
   }
   function getClientStatus(client) {
@@ -1872,11 +1902,20 @@
     const genArea = qs('qr-gen-area');
     const status = qs('qr-status-text');
     if (!offlineImg || !genArea || !status) return;
+    const renderTicket = Date.now();
+    state.qrRenderTicket = renderTicket;
+    const safeSetStatus = (text = '') => {
+      if (state.qrRenderTicket !== renderTicket) return;
+      status.textContent = text;
+    };
     genArea.innerHTML = '';
-    status.textContent = '';
+    safeSetStatus('');
     const isDynamicEnabled = isPromptPayDynamicEnabled();
     offlineImg.classList.add('hidden');
     genArea.classList.add('hidden');
+    offlineImg.removeAttribute('src');
+    const hasStaticQr = Boolean(state.db.qrOffline);
+    const promptPayError = getPromptPayFormatError(state.db.ppay);
 
     const payload = buildPromptPayPayload(state.db.ppay, state.currentCheckoutTotal, state.db.shopName);
     const qrCanvas = generatePromptPayQrCanvas(state.db.ppay, state.currentCheckoutTotal, {
@@ -1884,60 +1923,53 @@
       height: 150,
       shopName: state.db.shopName
     });
-    const mustUseMasterQr = IS_CLIENT_NODE;
-
-    if (mustUseMasterQr) {
-      if (state.db.qrOffline) {
-        offlineImg.src = state.db.qrOffline;
-        offlineImg.classList.remove('hidden');
-        status.textContent = state.db.bank && state.db.ppay
-          ? `${state.db.bank} • ${state.db.ppay} (Sync จากเครื่องแม่)`
-          : 'Sync QR จากเครื่องแม่แล้ว';
-        return;
-      }
-      genArea.classList.remove('hidden');
-      genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่มี QR จากเครื่องแม่<br>กรุณาอัปโหลด QR ที่เครื่องแม่ก่อน</div>';
-      status.textContent = 'รอซิงค์ QR จากเครื่องแม่';
-      return;
-    }
 
     if (!isDynamicEnabled) {
-      if (state.db.qrOffline) {
+      if (hasStaticQr) {
         offlineImg.src = state.db.qrOffline;
         offlineImg.classList.remove('hidden');
-        status.textContent = state.db.bank && state.db.ppay ? `${state.db.bank} • ${state.db.ppay} (Static)` : 'ใช้ QR ที่ร้านอัปไว้ (Static)';
-        return;
-      }
-      if (qrCanvas && payload) {
-        genArea.classList.remove('hidden');
-        genArea.appendChild(qrCanvas);
-        status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Auto Dynamic)`;
+        safeSetStatus(state.db.bank && state.db.ppay ? `${state.db.bank} • ${state.db.ppay} (Static)` : 'ใช้ QR Static จากรูปที่ร้านอัปโหลด');
         return;
       }
       genArea.classList.remove('hidden');
-      genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่มี QR แบบภาพนิ่ง และสร้าง Dynamic ไม่ได้<br>กรุณาใส่พร้อมเพย์หรืออัปโหลด QR</div>';
-      status.textContent = 'โหมด Static: ยังไม่มี QR พร้อมใช้งาน';
+      genArea.innerHTML = '<div class="text-xs text-red-500 font-bold text-center">โหมด Static แต่ยังไม่มีรูป QR ที่ร้านอัปโหลด</div>';
+      safeSetStatus('สร้าง QR ไม่ได้: โหมด Static ต้องมี QR ภาพนิ่ง');
       return;
     }
 
     genArea.classList.remove('hidden');
+    if (promptPayError) {
+      genArea.innerHTML = `<div class="text-xs text-red-500 font-bold text-center">${escapeHtml(promptPayError)}</div>`;
+      safeSetStatus(`Dynamic ใช้งานไม่ได้: ${promptPayError}`);
+      return;
+    }
     if (qrCanvas && payload) {
       genArea.appendChild(qrCanvas);
-      status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic)`;
+      safeSetStatus(`${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic)`);
       return;
     }
-    if (state.db.qrOffline) {
-      offlineImg.src = state.db.qrOffline;
-      offlineImg.classList.remove('hidden');
-      status.textContent = state.db.bank && state.db.ppay
-        ? `${state.db.bank} • ${state.db.ppay} (Fallback Static)`
-        : 'Dynamic ไม่พร้อม ใช้ QR ภาพนิ่งแทน';
+
+    const fallbackUrl = getPromptPayDynamicQrFallbackUrl(payload);
+    if (fallbackUrl) {
+      offlineImg.onload = () => {
+        if (state.qrRenderTicket !== renderTicket) return;
+        offlineImg.classList.remove('hidden');
+        safeSetStatus(`${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic ผ่าน Online Fallback)`);
+      };
+      offlineImg.onerror = () => {
+        if (state.qrRenderTicket !== renderTicket) return;
+        offlineImg.classList.add('hidden');
+        genArea.innerHTML = '<div class="text-xs text-red-500 font-bold text-center">อุปกรณ์นี้สร้าง QR ไม่ได้ และออนไลน์ fallback ไม่สำเร็จ</div>';
+        safeSetStatus('Dynamic ใช้งานไม่ได้: เครื่องสร้าง QR ไม่ได้ และ fallback ออนไลน์ล้มเหลว/ออฟไลน์');
+      };
+      offlineImg.src = fallbackUrl;
+      safeSetStatus('กำลัง fallback ไปสร้าง QR แบบออนไลน์...');
       return;
     }
-    genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่สามารถสร้าง QR Dynamic ได้<br>กรุณาอัปโหลด QR Static ในหน้าระบบเพื่อใช้งานผ่าน LAN</div>';
-    status.textContent = typeof QRCode !== 'function'
-      ? 'ไม่พบตัวสร้าง QR ในเว็บ (QRCode lib) กรุณาอัปโหลด QR Static'
-      : 'ไม่มี QR พร้อมใช้งาน';
+    genArea.innerHTML = '<div class="text-xs text-red-500 font-bold text-center">ยังไม่สามารถสร้าง QR Dynamic ได้</div>';
+    safeSetStatus(typeof QRCode !== 'function'
+      ? 'Dynamic ใช้งานไม่ได้: ไม่พบตัวสร้าง QR และไม่สามารถ fallback ออนไลน์'
+      : 'Dynamic ใช้งานไม่ได้: payload ว่างหรือรูปแบบไม่รองรับ');
   }
 
   function renderCheckoutMemberSummary(unit) {
@@ -1958,8 +1990,19 @@
     if (!unit || !unit.orders.length) return;
     const keyword = String(qs('checkout-member-keyword')?.value || '').trim();
     if (!keyword) return showToast('กรอกชื่อหรือเบอร์สมาชิกก่อน', 'error');
-    const member = resolveMemberByKeyword(keyword);
-    if (!member) return showToast('ไม่พบสมาชิก', 'error');
+    let member = resolveMemberByKeyword(keyword);
+    if (!member) {
+      const isPhoneKeyword = /^\d{10}$/.test(sanitizePhone(keyword));
+      member = normalizeMemberRecord({
+        name: isPhoneKeyword ? `สมาชิก ${sanitizePhone(keyword)}` : keyword,
+        phone: isPhoneKeyword ? sanitizePhone(keyword) : '',
+        points: 0,
+        firstSeenAt: Date.now(),
+        updatedAt: Date.now()
+      });
+      state.db.members[member.id] = member;
+      showToast('ไม่พบสมาชิกเดิม: เพิ่มสมาชิกใหม่ให้แล้ว', 'success');
+    }
     unit.checkoutMemberId = member.id;
     renderCheckoutMemberSummary(unit);
     saveDb({ render: false, sync: true });
@@ -3329,7 +3372,8 @@
     if (/client\.html$/i.test(window.location.pathname || '')) return;
     console.log('[FAKDU][SYNC] redirect to client page', { reason, path: window.location.pathname });
     if (reason) showToast(reason, 'success');
-    showToast('โหมดอุปกรณ์เสริมถูกปิดในรุ่น Offline-only', 'error');
+    applyClientAccessModeUi();
+    switchTab('customer', qs('tab-customer'));
   }
 
   async function persistClientSession(session = null) {
@@ -4814,13 +4858,6 @@
   //* init open
   async function init() {
     try {
-      if (!IS_CLIENT_NODE && localStorage.getItem(LS_FORCE_CLIENT_MODE) === 'true') {
-        const lastSession = getStoredClientSession();
-        if (lastSession?.clientSessionToken) {
-          showToast('โหมดอุปกรณ์เสริมถูกปิดในรุ่น Offline-only', 'error');
-          return;
-        }
-      }
       state.isStaffMode = resolveStaffModeFlag();
       state.hwid = await resolveDbApi().getDeviceId();
       await hydrateClientSessionFromDb();
@@ -4901,6 +4938,9 @@
           state.db.items = [];
           state.db.units = [];
           state.db.unitCount = 0;
+          if (urlPin && !localStorage.getItem(LS_PENDING_PAIR_REQUEST_ID)) {
+            submitClientAccessRequestFromModal();
+          }
         }
       }
       const today = getLocalYYYYMMDD();
@@ -4970,7 +5010,20 @@
       });
     }
     const ppayInput = qs('sys-ppay');
-    if (ppayInput) ppayInput.addEventListener('input', updateQrSetupHealth);
+    if (ppayInput) {
+      ppayInput.addEventListener('input', () => {
+        updateQrSetupHealth();
+        const checkoutModal = qs('modal-checkout');
+        if (checkoutModal && !checkoutModal.classList.contains('hidden')) updateQrDisplay();
+      });
+    }
+    const bankInput = qs('sys-bank');
+    if (bankInput) {
+      bankInput.addEventListener('input', () => {
+        const checkoutModal = qs('modal-checkout');
+        if (checkoutModal && !checkoutModal.classList.contains('hidden')) updateQrDisplay();
+      });
+    }
     document.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
