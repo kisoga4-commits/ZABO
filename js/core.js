@@ -4062,10 +4062,19 @@
   }
 
   function requestNewSyncKey() {
+    if (!state.isAdminLoggedIn || state.activeTab !== 'system') {
+      showToast('รีเซ็ต PIN ได้เฉพาะโหมดระบบ', 'error');
+      return;
+    }
     openModal('modal-sync-key-confirm');
   }
 
   async function confirmNewSyncKey() {
+    if (!state.isAdminLoggedIn || state.activeTab !== 'system') {
+      closeModal('modal-sync-key-confirm');
+      showToast('รีเซ็ต PIN ได้เฉพาะโหมดระบบ', 'error');
+      return;
+    }
     const today = getLocalYYYYMMDD();
     const sameDay = String(state.db.sync.keyResetDate || '') === String(today);
     const usedToday = sameDay ? Number(state.db.sync.keyResetCount || 0) : 0;
