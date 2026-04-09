@@ -111,8 +111,6 @@
     pendingAddonItem: null,
     currentAddonQty: 1,
     currentCheckoutTotal: 0,
-    checkoutMemberInputDirty: false,
-    checkoutMemberPanelVisible: false,
     redeemDraft: [],
     qrScanner: null,
     deferredInstallPrompt: null,
@@ -465,6 +463,19 @@
     };
   }
 
+  function buildSyncUnitsPayload() {
+    return (Array.isArray(state.db.units) ? state.db.units : []).map((unit, index) => normalizeUnit(unit, Number(unit?.id || index + 1)));
+  }
+
+  function buildSyncPaymentPayload() {
+    return {
+      bank: String(state.db.bank || ''),
+      ppay: String(state.db.ppay || ''),
+      qrOffline: String(state.db.qrOffline || ''),
+      soundEnabled: Boolean(state.db.soundEnabled)
+    };
+  }
+
   function makeCloudSnapshotPayload() {
     return {
       shopId: state.db.shopId,
@@ -476,15 +487,10 @@
       unitType: state.db.unitType,
       unitCount: state.db.unitCount,
       menuMetadata: state.db.items.map((item) => normalizeMenuItemForCloud(item)),
-      units: state.db.units,
+      units: buildSyncUnitsPayload(),
       carts: state.db.carts,
       sales: state.db.sales,
-      settings: {
-        bank: state.db.bank || '',
-        ppay: state.db.ppay || '',
-        qrOffline: state.db.qrOffline || '',
-        soundEnabled: Boolean(state.db.soundEnabled)
-      },
+      settings: buildSyncPaymentPayload(),
       syncSession: {
         syncVersion: Number(state.db.sync.syncVersion || 1),
         currentSyncPin: state.db.sync.currentSyncPin || '',
@@ -492,6 +498,34 @@
       },
       at: Date.now()
     };
+  }
+
+  function applySyncedUnits(payloadUnits = [], payloadUnitCount = null) {
+    if (!Array.isArray(payloadUnits)) return;
+    const unitCountFromPayload = Math.max(1, Number(payloadUnitCount || payloadUnits.length || state.db.unitCount || 1));
+    const unitById = new Map(payloadUnits.map((unit, index) => [Number(unit?.id || index + 1), unit]));
+    const nextUnits = [];
+    for (let id = 1; id <= unitCountFromPayload; id += 1) {
+      nextUnits.push(normalizeUnit(unitById.get(id), id));
+    }
+    state.db.units = nextUnits;
+    state.db.unitCount = nextUnits.length;
+  }
+
+  function applySyncedPaymentSettings(settings = null) {
+    if (!settings || typeof settings !== 'object') return;
+    if (Object.prototype.hasOwnProperty.call(settings, 'bank')) {
+      state.db.bank = String(settings.bank || '');
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'ppay')) {
+      state.db.ppay = String(settings.ppay || '');
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'qrOffline')) {
+      state.db.qrOffline = String(settings.qrOffline || '');
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'soundEnabled')) {
+      state.db.soundEnabled = Boolean(settings.soundEnabled);
+    }
   }
 
   function makeSyncMessageId() {
@@ -769,69 +803,6 @@
     const byPhone = findMemberByPhone(text);
     if (byPhone) return byPhone;
     return findMemberByName(text);
-  }
-
-  function renderCheckoutMemberHint(text = '', tone = 'default') {
-    const hint = qs('checkout-member-hint');
-    if (!hint) return;
-    hint.textContent = text || 'ไม่กรอก = ลูกค้าทั่วไป';
-    hint.className = 'text-[10px] font-bold mt-2';
-    if (tone === 'success') {
-      hint.classList.add('text-emerald-600');
-      return;
-    }
-    if (tone === 'warn') {
-      hint.classList.add('text-amber-600');
-      return;
-    }
-    hint.classList.add('text-gray-400');
-  }
-
-  function markCheckoutMemberDirty() {
-    state.checkoutMemberInputDirty = true;
-  }
-
-  function setCheckoutMemberPanelVisible(visible = false) {
-    state.checkoutMemberPanelVisible = Boolean(visible);
-    const fields = qs('checkout-member-fields');
-    const label = qs('checkout-member-toggle-label');
-    if (fields) fields.classList.toggle('hidden', !state.checkoutMemberPanelVisible);
-    if (label) label.textContent = state.checkoutMemberPanelVisible ? 'ซ่อนช่องสมาชิก' : 'กดเพื่อกรอก';
-  }
-
-  function toggleCheckoutMemberSection() {
-    setCheckoutMemberPanelVisible(!state.checkoutMemberPanelVisible);
-    if (state.checkoutMemberPanelVisible) qs('checkout-member-keyword')?.focus();
-  }
-
-  function lookupCheckoutMember(rawKeyword = '') {
-    const keywordInput = qs('checkout-member-keyword');
-    if (!keywordInput) return null;
-    const keyword = String(rawKeyword || keywordInput.value || '').trim();
-    keywordInput.value = keyword;
-    if (!keyword) {
-      renderCheckoutMemberHint('ไม่กรอก = ลูกค้าทั่วไป');
-      return null;
-    }
-    const member = resolveMemberByKeyword(keyword);
-    if (!member) {
-      renderCheckoutMemberHint('ยังไม่พบสมาชิก: พิมพ์ชื่อหรือเบอร์ แล้วปิดบิลเพื่อสมัครทันที', 'warn');
-      return null;
-    }
-    renderCheckoutMemberHint(`สมาชิกเดิม: ${member.name || member.phone} (${formatMoney(member.points)} พอยท์)`, 'success');
-    return member;
-  }
-
-  function applyCheckoutMemberLookup() {
-    state.checkoutMemberInputDirty = false;
-    lookupCheckoutMember(qs('checkout-member-keyword')?.value || '');
-  }
-
-  function resetCheckoutMemberInputs() {
-    if (qs('checkout-member-keyword')) qs('checkout-member-keyword').value = '';
-    state.checkoutMemberInputDirty = false;
-    setCheckoutMemberPanelVisible(false);
-    renderCheckoutMemberHint('ไม่กรอก = ลูกค้าทั่วไป');
   }
 
   //* save/load open
@@ -1519,20 +1490,19 @@
     const list = qs('review-list');
     if (list) {
       list.innerHTML = cart.map((row, index) => `
-        <div class="py-3">
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex-1 min-w-0">
-              <div class="font-black text-gray-800 leading-tight break-words">${escapeHtml(row.name)}</div>
-              <div class="text-[11px] text-gray-500 font-bold mt-1">฿${formatMoney(row.price)} / รายการ</div>
-            </div>
-            <div class="font-black theme-text text-right shrink-0">฿${formatMoney(row.total)}</div>
+        <div class="review-item-row">
+          <div class="review-item-main">
+            <div class="review-item-name">${escapeHtml(row.name)}</div>
+            <div class="review-item-price">฿${formatMoney(row.price)} / รายการ</div>
           </div>
-          <div class="mt-3 inline-flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-2 py-1">
-            <button onclick="editCartItem(${index}, -1)" class="w-8 h-8 rounded-lg bg-white border border-gray-200 font-black text-gray-700">−</button>
-            <span class="font-black text-base min-w-[24px] text-center">${row.qty}</span>
-            <button onclick="editCartItem(${index}, 1)" class="w-8 h-8 rounded-lg bg-white border border-gray-200 font-black text-gray-700">+</button>
+          <div class="review-item-controls">
+            <button onclick="editCartItem(${index}, -1)" class="review-qty-btn" aria-label="ลดจำนวน ${escapeHtml(row.name)}">−</button>
+            <span class="review-qty">${row.qty}</span>
+            <button onclick="editCartItem(${index}, 1)" class="review-qty-btn" aria-label="เพิ่มจำนวน ${escapeHtml(row.name)}">+</button>
           </div>
+          <div class="review-item-total">฿${formatMoney(row.total)}</div>
         </div>
+        ${index < cart.length - 1 ? '<div class="review-item-divider" aria-hidden="true"></div>' : ''}
       `).join('');
     }
     const total = cart.reduce((sum, row) => sum + row.total, 0);
@@ -1746,13 +1716,13 @@
     state.currentCheckoutTotal = total;
     if (qs('checkout-unit-id')) qs('checkout-unit-id').textContent = String(unit.id);
     if (qs('checkout-total')) qs('checkout-total').textContent = formatMoney(total);
-    resetCheckoutMemberInputs();
     if (list) {
       list.innerHTML = unit.orders.map((row, index) => `
         <div class="flex justify-between items-center gap-3 py-3">
           <div class="min-w-0 flex-1">
             <div class="font-black text-gray-800 truncate">${escapeHtml(row.name)}</div>
             <div class="text-[10px] text-gray-400 font-bold mt-1">${thaiDate(row.createdAt)}${row.redeemedByPoints ? ` • แลก ${formatMoney(row.redeemPoints || 0)} พอยท์/ชิ้น` : ''}</div>
+            ${!row.redeemedByPoints && getRedeemPointsForOrderRow(row) > 0 ? `<button onclick="openRedeemPointsModal(${index})" class="mt-1 text-[10px] px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-black">แลกพอยท์</button>` : ''}
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <div class="font-black">x${row.qty}</div>
@@ -1769,136 +1739,98 @@
     renderShopQueue();
   }
 
-  function getCheckoutResolvedMember() {
-    const keyword = String(qs('checkout-member-keyword')?.value || '').trim();
-    if (!keyword) return null;
-    return resolveMemberByKeyword(keyword);
+  function getRedeemPointsForOrderRow(row) {
+    if (!row) return 0;
+    const explicit = Math.max(0, Number(row.redeemPoints || 0));
+    if (explicit > 0) return explicit;
+    const byId = state.db.items.find((item) => String(item.id) === String(row.itemId || ''));
+    if (byId) return Math.max(0, Number(byId.redeemPoints || 0));
+    const baseName = String(row.baseName || row.name || '').trim().toLowerCase();
+    if (!baseName) return 0;
+    const byName = state.db.items.find((item) => String(item.name || '').trim().toLowerCase() === baseName);
+    return Math.max(0, Number(byName?.redeemPoints || 0));
   }
 
-  function getRedeemResolvedMember() {
-    const orderKeyword = String(qs('order-redeem-member-keyword')?.value || '').trim();
-    if (orderKeyword) return resolveMemberByKeyword(orderKeyword);
-    return getCheckoutResolvedMember();
-  }
-
-  function openOrderRedeemPanel() {
-    if (!state.activeUnitId) return showToast('กรุณาเลือกโต๊ะก่อน', 'error');
-    openRedeemPointsModal();
-  }
-
-  function openRedeemPointsModal() {
-    const member = getRedeemResolvedMember();
-    if (!member) return showToast('กรุณากรอกชื่อสมาชิกหรือเบอร์โทรก่อนแลกพอยท์', 'error');
-    const redeemable = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
-    if (!redeemable.length) {
-      showToast('ยังไม่มีเมนูที่ตั้งค่าแลกพอยท์', 'error');
-      return;
+  function openRedeemPointsModal(orderIndex) {
+    const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
+    if (!unit) return;
+    const target = unit.orders[Number(orderIndex)];
+    if (!target) return;
+    if (target.redeemedByPoints) return showToast('รายการนี้แลกพอยท์แล้ว', 'error');
+    const pointsPerItem = getRedeemPointsForOrderRow(target);
+    if (pointsPerItem <= 0) return showToast('เมนูนี้ยังไม่รองรับการแลกพอยท์', 'error');
+    const qty = Math.max(1, Number(target.qty || 1));
+    const totalNeed = pointsPerItem * qty;
+    state.redeemDraft = [{ orderIndex: Number(orderIndex), pointsPerItem, totalNeed }];
+    if (qs('redeem-target-name')) qs('redeem-target-name').textContent = `${target.name} x${qty}`;
+    if (qs('redeem-target-cost')) qs('redeem-target-cost').textContent = `ใช้ ${formatMoney(totalNeed)} พอยท์ (฿${formatMoney(target.total)} → ฿0)`;
+    if (qs('redeem-member-keyword')) qs('redeem-member-keyword').value = '';
+    if (qs('redeem-member-balance')) {
+      qs('redeem-member-balance').textContent = 'ยังไม่ได้ตรวจสอบสมาชิก';
+      qs('redeem-member-balance').className = 'text-[11px] font-black text-gray-500 mb-3';
     }
-    state.redeemDraft = [];
-    const balanceEl = qs('redeem-member-balance');
-    if (balanceEl) balanceEl.textContent = `พอยท์คงเหลือ: ${formatMoney(member.points || 0)}`;
-    const list = qs('redeem-menu-list');
-    if (list) {
-      list.innerHTML = redeemable.map((item) => `
-        <label class="bg-gray-50 border rounded-xl p-3 flex justify-between items-start gap-2 cursor-pointer">
-            <div class="min-w-0 flex-1">
-              <div class="font-black text-sm text-gray-800 truncate">${escapeHtml(item.name)}</div>
-              <div class="text-[10px] text-gray-500 font-bold">ปกติ ฿${formatMoney(item.price)} • แลก ${formatMoney(item.redeemPoints)} พอยท์</div>
-            </div>
-            <input type="checkbox" class="w-5 h-5 mt-1 redeem-item-checkbox" data-item-id="${escapeHtml(item.id)}" data-points="${Math.max(0, Number(item.redeemPoints || 0))}">
-        </label>
-      `).join('');
-    }
-    const checkboxes = [...document.querySelectorAll('.redeem-item-checkbox')];
-    const refreshRedeemAvailability = () => {
-      const selectedNeed = checkboxes.reduce((sum, checkbox) => {
-        if (!(checkbox instanceof HTMLInputElement) || !checkbox.checked) return sum;
-        return sum + Math.max(0, Number(checkbox.dataset.points || 0));
-      }, 0);
-      const remain = Math.max(0, Number(member.points || 0) - selectedNeed);
-      if (balanceEl) balanceEl.textContent = `พอยท์คงเหลือ: ${formatMoney(member.points || 0)} (เหลือให้เลือกอีก ${formatMoney(remain)})`;
-      checkboxes.forEach((checkbox) => {
-        if (!(checkbox instanceof HTMLInputElement)) return;
-        if (checkbox.checked) return;
-        const need = Math.max(0, Number(checkbox.dataset.points || 0));
-        checkbox.disabled = need > remain;
-      });
-    };
-    checkboxes.forEach((checkbox) => {
-      if (!(checkbox instanceof HTMLInputElement)) return;
-      checkbox.addEventListener('change', (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLInputElement)) return;
-        const selectedNeed = checkboxes.reduce((sum, cb) => {
-          if (!(cb instanceof HTMLInputElement) || !cb.checked) return sum;
-          return sum + Math.max(0, Number(cb.dataset.points || 0));
-        }, 0);
-        if (selectedNeed > Number(member.points || 0)) {
-          target.checked = false;
-          showToast('พอยท์ไม่พอสำหรับเมนูที่เลือก', 'error');
-        }
-        refreshRedeemAvailability();
-      });
-    });
-    refreshRedeemAvailability();
     openModal('modal-redeem-points');
   }
 
+  function checkRedeemMemberBalance() {
+    const draft = Array.isArray(state.redeemDraft) ? state.redeemDraft[0] : null;
+    if (!draft) return null;
+    const keyword = String(qs('redeem-member-keyword')?.value || '').trim();
+    if (!keyword) {
+      showToast('กรอกชื่อหรือเบอร์สมาชิกก่อน', 'error');
+      return null;
+    }
+    const member = resolveMemberByKeyword(keyword);
+    if (!member) {
+      if (qs('redeem-member-balance')) {
+        qs('redeem-member-balance').textContent = 'ไม่พบสมาชิก';
+        qs('redeem-member-balance').className = 'text-[11px] font-black text-red-500 mb-3';
+      }
+      return null;
+    }
+    const enough = Number(member.points || 0) >= Number(draft.totalNeed || 0);
+    if (qs('redeem-member-balance')) {
+      qs('redeem-member-balance').textContent = enough
+        ? `${member.name || member.phone} มี ${formatMoney(member.points || 0)} พอยท์ (พอแลก)`
+        : `${member.name || member.phone} มี ${formatMoney(member.points || 0)} พอยท์ (ไม่พอ)`;
+      qs('redeem-member-balance').className = `text-[11px] font-black mb-3 ${enough ? 'text-emerald-600' : 'text-red-500'}`;
+    }
+    return member;
+  }
+
   function applyRedeemPointsSelection() {
-    const member = getRedeemResolvedMember();
+    const draft = Array.isArray(state.redeemDraft) ? state.redeemDraft[0] : null;
+    if (!draft) return showToast('ไม่พบรายการที่ต้องการแลกพอยท์', 'error');
+    const member = checkRedeemMemberBalance();
     if (!member) return showToast('ไม่พบสมาชิกสำหรับแลกพอยท์', 'error');
     const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
     if (!unit) return;
-    const redeemable = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
-    if (!redeemable.length) return showToast('ยังไม่มีเมนูแลกพอยท์', 'error');
+    const orderRow = unit.orders[Number(draft.orderIndex)];
+    if (!orderRow) return showToast('ไม่พบรายการนี้ในบิล', 'error');
+    if (Number(member.points || 0) < Number(draft.totalNeed || 0)) return showToast('พอยท์ไม่พอ', 'error');
 
-    const picked = [];
-    let totalNeed = 0;
-    const selectedIds = new Set(
-      [...document.querySelectorAll('.redeem-item-checkbox:checked')]
-        .map((row) => row instanceof HTMLInputElement ? String(row.dataset.itemId || '') : '')
-        .filter(Boolean)
-    );
-    redeemable.forEach((item) => {
-      if (!selectedIds.has(String(item.id))) return;
-      const qty = 1;
-      const points = Math.max(0, Number(item.redeemPoints || 0));
-      const lineNeed = points * qty;
-      totalNeed += lineNeed;
-      picked.push({ item, qty, points, lineNeed });
-    });
-    if (!picked.length) return showToast('ยังไม่ได้เลือกเมนูแลกพอยท์', 'error');
-    if (totalNeed > Number(member.points || 0)) return showToast('พอยท์ไม่พอ', 'error');
-
-    member.points = Math.max(0, Number(member.points || 0) - totalNeed);
+    member.points = Math.max(0, Number(member.points || 0) - Number(draft.totalNeed || 0));
     member.updatedAt = Date.now();
     state.db.members[member.id] = member;
-    picked.forEach(({ item, qty, points }) => {
-      unit.orders.push({
-        id: `ORD-RDM-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        itemId: item.id,
-        name: `${item.name} (แลกพอยท์)`,
-        qty,
-        price: 0,
-        total: 0,
-        addons: [],
-        createdAt: Date.now(),
-        redeemedByPoints: true,
-        redeemPoints: points,
-        redeemPointsDeducted: true,
-        redeemedMemberId: member.id
-      });
-    });
-    logOperation('ADD_REDEEM_ITEMS', {
+    orderRow.price = 0;
+    orderRow.total = 0;
+    orderRow.redeemedByPoints = true;
+    orderRow.redeemPoints = Math.max(0, Number(draft.pointsPerItem || 0));
+    orderRow.redeemPointsDeducted = true;
+    orderRow.redeemedMemberId = member.id;
+    orderRow.name = `${orderRow.baseName || orderRow.name} (แลกพอยท์)`;
+    logOperation('REDEEM_ORDER_ITEM', {
       unitId: unit.id,
       memberId: member.id,
-      totalPoints: totalNeed,
-      lines: picked.map((row) => ({ itemId: row.item.id, qty: row.qty, points: row.points }))
+      orderId: orderRow.id,
+      totalPoints: Number(draft.totalNeed || 0),
+      pointsPerItem: Number(draft.pointsPerItem || 0)
     });
+    state.redeemDraft = [];
     closeModal('modal-redeem-points');
     saveDb({ render: true, sync: true });
     openCheckout(unit.id);
-    showToast(`เพิ่มเมนูแลกพอยท์ให้ ${member.name || member.phone || 'สมาชิก'} แล้ว (${formatMoney(totalNeed)} พอยท์)`, 'success');
+    showToast(`แลกรายการสำเร็จ ใช้ ${formatMoney(draft.totalNeed || 0)} พอยท์`, 'success');
   }
 
   function updateQrDisplay() {
@@ -2019,43 +1951,7 @@
       if (!row || !row.redeemedByPoints || row.redeemPointsDeducted) return sum;
       return sum + Math.max(0, Number(row.redeemPoints || 0)) * Math.max(1, Number(row.qty || 1));
     }, 0);
-    const memberKeyword = String(qs('checkout-member-keyword')?.value || '').trim();
-    let memberSnapshot = null;
-    if (memberKeyword) {
-      const normalizedPhone = sanitizePhone(memberKeyword);
-      const existing = resolveMemberByKeyword(memberKeyword);
-      const nowMs = Date.now();
-      const nextMember = normalizeMemberRecord({
-        id: existing?.id || '',
-        phone: normalizedPhone || existing?.phone || '',
-        name: normalizedPhone ? (existing?.name || normalizedPhone) : (existing?.name || memberKeyword),
-        points: existing?.points || 0,
-        firstSeenAt: existing?.firstSeenAt || nowMs,
-        updatedAt: nowMs
-      });
-      const currentPoints = Number(nextMember.points || 0);
-      if (usedPoints > currentPoints) {
-        return showToast('พอยท์สมาชิกไม่พอสำหรับรายการแลกพอยท์', 'error');
-      }
-      nextMember.points = currentPoints - usedPoints;
-      const paidAmountForPoint = Math.max(0, total);
-      const earnedPoints = Math.floor(paidAmountForPoint / MEMBER_BAHT_PER_POINT);
-      nextMember.points = Number(nextMember.points || 0) + earnedPoints;
-      state.db.members[nextMember.id] = nextMember;
-      memberSnapshot = {
-        id: nextMember.id,
-        phone: nextMember.phone,
-        name: nextMember.name,
-        usedPoints,
-        earnedPoints
-      };
-      const api = resolveFirebaseSyncApi();
-      if (api && state.db.shopId) {
-        const payload = { ...nextMember, shopId: state.db.shopId };
-        if (typeof api.upsertMember === 'function') api.upsertMember(state.db.shopId, payload).catch(() => {});
-        else if (typeof api.writeMember === 'function') api.writeMember(state.db.shopId, payload).catch(() => {});
-      }
-    }
+    const memberSnapshot = null;
     const timestamp = new Date();
     state.db.sales.push({
       id: `SALE-${Date.now()}`,
@@ -2084,9 +1980,8 @@
     closeModal('modal-checkout');
     saveDb({ render: true, sync: true });
     const paidText = method === 'transfer' ? 'ปิดบิล (โอน/QR) แล้ว' : 'ปิดบิล (เงินสด) แล้ว';
-    const usedText = memberSnapshot?.usedPoints ? ` ใช้ ${memberSnapshot.usedPoints} พอยท์` : '';
-    const pointText = memberSnapshot?.earnedPoints ? ` +${memberSnapshot.earnedPoints} พอยท์` : '';
-    showToast(`${paidText}${usedText}${pointText}`, 'success');
+    const usedText = usedPoints ? ` ใช้ ${usedPoints} พอยท์` : '';
+    showToast(`${paidText}${usedText}`, 'success');
     if (state.activeTab === 'shop') renderShopQueue();
     if (state.activeTab === 'manage') renderAnalytics();
   }
@@ -3248,18 +3143,10 @@
     } else if (Array.isArray(payload.items)) {
       state.db.items = payload.items;
     }
-    if (Array.isArray(payload.units)) {
-      state.db.units = payload.units.map((unit, index) => normalizeUnit(unit, index + 1));
-      state.db.unitCount = state.db.units.length;
-    }
+    if (Array.isArray(payload.units)) applySyncedUnits(payload.units, payload.unitCount);
     if (payload.carts && typeof payload.carts === 'object') state.db.carts = payload.carts;
     if (Array.isArray(payload.sales)) state.db.sales = payload.sales;
-    if (payload.settings && typeof payload.settings === 'object') {
-      state.db.bank = payload.settings.bank || state.db.bank;
-      state.db.ppay = payload.settings.ppay || state.db.ppay;
-      state.db.qrOffline = payload.settings.qrOffline || state.db.qrOffline;
-      state.db.soundEnabled = Boolean(payload.settings.soundEnabled);
-    }
+    applySyncedPaymentSettings(payload.settings);
     saveDb({ render: true, sync: false });
   }
 
@@ -5030,15 +4917,11 @@
     editCartItem,
     confirmOrderSend,
     openCheckout,
-    openOrderRedeemPanel,
     deleteOrderItem,
     confirmPayment,
-    lookupCheckoutMember,
-    applyCheckoutMemberLookup,
     openRedeemPointsModal,
+    checkRedeemMemberBalance,
     applyRedeemPointsSelection,
-    toggleCheckoutMemberSection,
-    markCheckoutMemberDirty,
     switchManageSub,
     switchMenuManageTab,
     switchDashTab,
