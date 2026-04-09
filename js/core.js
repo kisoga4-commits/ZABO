@@ -112,7 +112,6 @@
     checkoutMemberPanelVisible: false,
     redeemDraft: [],
     qrScanner: null,
-    memberScanner: null,
     deferredInstallPrompt: null,
     syncButtonResetTimer: null,
     syncChannel: null,
@@ -1606,10 +1605,21 @@
   }
 
   function openRedeemPointsModal() {
-    const member = getCheckoutResolvedMember();
+    let member = getCheckoutResolvedMember();
     if (!member) {
-      showToast('กรอกสมาชิกก่อนแลกแต้ม', 'error');
-      return;
+      const promptValue = window.prompt('กรอกเบอร์โทร หรือชื่อสมาชิกเพื่อแลกแต้ม', String(qs('checkout-member-keyword')?.value || ''));
+      if (promptValue === null) return;
+      const keyword = String(promptValue || '').trim();
+      if (!keyword) {
+        showToast('ยังไม่ได้กรอกข้อมูลสมาชิก', 'error');
+        return;
+      }
+      if (qs('checkout-member-keyword')) qs('checkout-member-keyword').value = keyword;
+      member = lookupCheckoutMember(keyword);
+      if (!member) {
+        showToast('ไม่พบสมาชิกจากชื่อหรือเบอร์ที่กรอก', 'error');
+        return;
+      }
     }
     const redeemable = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
     if (!redeemable.length) {
@@ -1656,6 +1666,10 @@
     });
     if (!picked.length) return showToast('ยังไม่ได้เลือกเมนูแลกแต้ม', 'error');
     if (totalNeed > Number(member.points || 0)) return showToast('แต้มไม่พอ', 'error');
+
+    const selectedLines = picked.map(({ item, qty, lineNeed }) => `• ${item.name} x${qty} (${formatMoney(lineNeed)} แต้ม)`).join('\n');
+    const shouldRedeem = window.confirm(`ยืนยันการแลกแต้มของ ${member.name || member.phone || 'สมาชิก'}\n${selectedLines}\nรวมใช้ ${formatMoney(totalNeed)} แต้ม`);
+    if (!shouldRedeem) return;
 
     picked.forEach(({ item, qty, points }) => {
       unit.orders.push({
@@ -2201,6 +2215,7 @@
   function renderAdminLists() {
     const list = qs('admin-menu-list');
     if (qs('menu-count')) qs('menu-count').textContent = String(state.db.items.length);
+    renderRedeemManagementList();
     if (!list) return;
     if (!state.db.items.length) {
       list.innerHTML = '<div class="bg-gray-50 border rounded-[24px] p-6 text-center text-gray-400 font-bold">ยังไม่มีเมนูในระบบ</div>';
@@ -2227,6 +2242,89 @@
         </div>
       </div>
     `).join('');
+  }
+
+  function renderRedeemManagementList() {
+    const eligibleBox = qs('redeem-eligible-list');
+    const disabledBox = qs('redeem-disabled-list');
+    const eligibleCountEl = qs('redeem-eligible-count');
+    const disabledCountEl = qs('redeem-disabled-count');
+    if (!eligibleBox || !disabledBox) return;
+    const eligibleItems = state.db.items
+      .filter((item) => Number(item.redeemPoints || 0) > 0)
+      .sort((a, b) => Number(a.redeemPoints || 0) - Number(b.redeemPoints || 0));
+    const disabledItems = state.db.items
+      .filter((item) => Number(item.redeemPoints || 0) <= 0)
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    if (eligibleCountEl) eligibleCountEl.textContent = formatMoney(eligibleItems.length);
+    if (disabledCountEl) disabledCountEl.textContent = formatMoney(disabledItems.length);
+
+    eligibleBox.innerHTML = eligibleItems.length
+      ? eligibleItems.map((item) => `
+        <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="font-black text-sm text-emerald-900 truncate">${escapeHtml(item.name)}</div>
+            <div class="text-[10px] font-black text-emerald-700">ใช้ ${formatMoney(item.redeemPoints)} แต้ม/ชิ้น</div>
+          </div>
+          <div class="flex gap-2 shrink-0">
+            <button onclick="quickEditRedeemItem('${escapeHtml(item.id)}')" class="px-3 py-2 rounded-lg bg-white border border-emerald-200 text-emerald-700 text-[10px] font-black">แก้ไขแต้ม</button>
+            <button onclick="quickDisableRedeemItem('${escapeHtml(item.id)}')" class="px-3 py-2 rounded-lg bg-red-50 border border-red-100 text-red-600 text-[10px] font-black">ลบสิทธิ์</button>
+          </div>
+        </div>
+      `).join('')
+      : '<div class="bg-gray-50 border rounded-xl p-3 text-xs font-bold text-gray-400 text-center">ยังไม่มีเมนูที่เปิดสิทธิ์แลกแต้ม</div>';
+
+    disabledBox.innerHTML = disabledItems.length
+      ? disabledItems.map((item) => `
+        <div class="bg-gray-50 border rounded-xl p-3 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="font-black text-sm text-gray-800 truncate">${escapeHtml(item.name)}</div>
+            <div class="text-[10px] font-bold text-gray-500">ยังไม่เปิดสิทธิ์แลกแต้ม</div>
+          </div>
+          <button onclick="quickEnableRedeemItem('${escapeHtml(item.id)}')" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-[10px] font-black shrink-0">+ เพิ่มสิทธิ์</button>
+        </div>
+      `).join('')
+      : '<div class="bg-gray-50 border rounded-xl p-3 text-xs font-bold text-gray-400 text-center">เมนูทั้งหมดเปิดสิทธิ์แลกแต้มแล้ว</div>';
+  }
+
+  function applyItemRedeemPoints(itemId, redeemPoints) {
+    if (!canManageOrders()) return showToast('ต้องเข้าโหมดแอดมินก่อน', 'error');
+    const target = state.db.items.find((row) => String(row.id) === String(itemId));
+    if (!target) return showToast('ไม่พบเมนู', 'error');
+    target.redeemPoints = Math.max(0, Math.floor(Number(redeemPoints || 0)));
+    logOperation('UPDATE_MENU_ITEM', { itemId: target.id, redeemPoints: target.redeemPoints });
+    saveDb({ render: true, sync: true });
+    return true;
+  }
+
+  function quickEnableRedeemItem(itemId) {
+    const target = state.db.items.find((row) => String(row.id) === String(itemId));
+    if (!target) return showToast('ไม่พบเมนู', 'error');
+    const raw = window.prompt(`กำหนดแต้มสำหรับเมนู ${target.name}`, '10');
+    if (raw === null) return;
+    const points = Math.max(0, Math.floor(Number(raw || 0)));
+    if (!points) return showToast('แต้มต้องมากกว่า 0', 'error');
+    if (!applyItemRedeemPoints(itemId, points)) return;
+    showToast(`เปิดสิทธิ์แลกแต้มให้ ${target.name} แล้ว`, 'success');
+  }
+
+  function quickEditRedeemItem(itemId) {
+    const target = state.db.items.find((row) => String(row.id) === String(itemId));
+    if (!target) return showToast('ไม่พบเมนู', 'error');
+    const raw = window.prompt(`แก้ไขแต้มของเมนู ${target.name}`, String(Math.max(0, Number(target.redeemPoints || 0))));
+    if (raw === null) return;
+    const points = Math.max(0, Math.floor(Number(raw || 0)));
+    if (!points) return showToast('แต้มต้องมากกว่า 0 (หากต้องการปิดสิทธิ์ ให้กดปุ่มลบสิทธิ์)', 'error');
+    if (!applyItemRedeemPoints(itemId, points)) return;
+    showToast(`อัปเดตแต้มของ ${target.name} แล้ว`, 'success');
+  }
+
+  function quickDisableRedeemItem(itemId) {
+    const target = state.db.items.find((row) => String(row.id) === String(itemId));
+    if (!target) return showToast('ไม่พบเมนู', 'error');
+    if (!window.confirm(`ยกเลิกสิทธิ์แลกแต้มของ ${target.name} ใช่ไหม?`)) return;
+    if (!applyItemRedeemPoints(itemId, 0)) return;
+    showToast(`ลบสิทธิ์แลกแต้มของ ${target.name} แล้ว`, 'success');
   }
 
   function openMenuModal(itemId = null) {
@@ -3967,115 +4065,6 @@
   //* sync close
 
   //* scanner open
-  function parseMemberPayload(rawValue = '') {
-    const raw = String(rawValue || '').trim();
-    if (!raw) return '';
-    try {
-      const payload = JSON.parse(raw);
-      const fromPhone = sanitizePhone(payload?.phone || payload?.tel || payload?.mobile || '');
-      const fromName = String(payload?.name || payload?.memberName || '').trim();
-      return fromPhone || fromName || '';
-    } catch (_) {
-      return sanitizePhone(raw) || raw;
-    }
-  }
-
-  async function openMemberScanner() {
-    openModal('modal-member-scanner');
-    const holder = qs('member-qr-reader');
-    if (holder) holder.textContent = 'กำลังเปิดกล้อง...';
-    try {
-      if (state.memberScanner) await closeMemberScanner(true);
-      const onDecoded = (decodedText) => {
-        const parsed = parseMemberPayload(decodedText);
-        if (!parsed) {
-          showToast('QR สมาชิกไม่ถูกต้อง', 'error');
-          return;
-        }
-        if (qs('checkout-member-keyword')) qs('checkout-member-keyword').value = parsed;
-        lookupCheckoutMember(parsed);
-        closeMemberScanner();
-        showToast('สแกนสมาชิกสำเร็จ', 'success');
-      };
-
-      if (window.Html5Qrcode) {
-        state.memberScanner = new Html5Qrcode('member-qr-reader');
-        const cameras = await Html5Qrcode.getCameras().catch(() => []);
-        const preferredCamera = cameras.find((cam) => /back|rear|environment/i.test(cam.label || ''))?.id || cameras[0]?.id || { facingMode: 'environment' };
-        await state.memberScanner.start(
-          preferredCamera,
-          { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
-          onDecoded
-        );
-        return;
-      }
-
-      if (!window.BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
-        showToast('อุปกรณ์นี้ยังใช้สแกน QR ไม่ได้', 'error');
-        return;
-      }
-      const detector = new BarcodeDetector({ formats: ['qr_code'] });
-      if (!holder) throw new Error('member qr holder not found');
-      holder.innerHTML = '';
-      const video = document.createElement('video');
-      video.setAttribute('playsinline', 'true');
-      video.autoplay = true;
-      video.muted = true;
-      video.className = 'w-full rounded-xl border';
-      holder.appendChild(video);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false
-      });
-      video.srcObject = stream;
-      await video.play();
-      let stopped = false;
-      let rafId = 0;
-      const scanLoop = async () => {
-        if (stopped) return;
-        try {
-          const result = await detector.detect(video);
-          const value = String(result?.[0]?.rawValue || '');
-          if (value) {
-            stopped = true;
-            onDecoded(value);
-            return;
-          }
-        } catch (_) {}
-        rafId = requestAnimationFrame(scanLoop);
-      };
-      rafId = requestAnimationFrame(scanLoop);
-      state.memberScanner = {
-        isScanning: true,
-        async stop() {
-          if (stopped) return;
-          stopped = true;
-          if (rafId) cancelAnimationFrame(rafId);
-          stream.getTracks().forEach((track) => track.stop());
-          try { video.pause(); } catch (_) {}
-        },
-        async clear() {
-          holder.innerHTML = '';
-        }
-      };
-    } catch (error) {
-      console.error(error);
-      showToast('เปิดกล้องสแกนสมาชิกไม่ได้', 'error');
-    }
-  }
-
-  async function closeMemberScanner(keepModal = false) {
-    try {
-      if (state.memberScanner) {
-        if (state.memberScanner.isScanning) await state.memberScanner.stop().catch(() => {});
-        await state.memberScanner.clear().catch(() => {});
-      }
-    } finally {
-      state.memberScanner = null;
-      if (!keepModal) closeModal('modal-member-scanner');
-    }
-  }
-
   async function openClientScanner() {
     console.log('[FAKDU][SYNC] openClientScanner');
     openModal('modal-client-scanner');
@@ -4695,6 +4684,9 @@
     addAddonField,
     removeAddonField,
     updateAddonField,
+    quickEnableRedeemItem,
+    quickEditRedeemItem,
+    quickDisableRedeemItem,
     saveMenuItem,
     deleteItem,
     updateUnits,
@@ -4726,8 +4718,6 @@
     requestNewSyncKey,
     confirmNewSyncKey,
     openApprovalInbox,
-    openMemberScanner,
-    closeMemberScanner,
     openClientScanner,
     closeClientScanner,
     submitClientAccessRequest,
