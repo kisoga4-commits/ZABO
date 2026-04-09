@@ -32,6 +32,16 @@ class StaffFlowSmokeTest(unittest.TestCase):
         conn.close()
         return res.status, headers, body
 
+    def request_json(self, method: str, path: str, payload: dict):
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        conn.request(method, path, body=raw, headers={"Content-Type": "application/json"})
+        res = conn.getresponse()
+        body = res.read()
+        headers = dict(res.getheaders())
+        conn.close()
+        return res.status, headers, body
+
     def test_home_contains_dual_staff_access_mode(self):
         status, _, body = self.request("GET", "/")
         self.assertEqual(status, 200)
@@ -58,6 +68,38 @@ class StaffFlowSmokeTest(unittest.TestCase):
         html = body.decode("utf-8", errors="ignore")
         self.assertIn("QR สำหรับเครื่องพนักงาน", html)
         self.assertIn("mode%3Dstaff", html)
+
+    def test_local_db_rejects_stale_saved_at_overwrite(self):
+        base = int(time.time() * 1000)
+        newer = {
+            "savedAt": base + 2000,
+            "appVersion": "test",
+            "sourceDeviceId": "MASTER",
+            "sourceMode": "master",
+            "db": {"shopName": "NEWER"},
+        }
+        older = {
+            "savedAt": base + 1000,
+            "appVersion": "test",
+            "sourceDeviceId": "STAFF",
+            "sourceMode": "staff",
+            "db": {"shopName": "OLDER"},
+        }
+        status, _, body = self.request_json("POST", "/api/local-db", newer)
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode("utf-8", errors="ignore"))
+        self.assertTrue(payload.get("saved"))
+
+        status, _, body = self.request_json("POST", "/api/local-db", older)
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode("utf-8", errors="ignore"))
+        self.assertTrue(payload.get("ignored"))
+        self.assertEqual(payload.get("reason"), "STALE_SNAPSHOT")
+
+        status, _, body = self.request("GET", "/api/local-db")
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode("utf-8", errors="ignore"))
+        self.assertEqual(payload.get("data", {}).get("db", {}).get("shopName"), "NEWER")
 
 
 if __name__ == "__main__":

@@ -226,6 +226,23 @@ class FakduHandler(SimpleHTTPRequestHandler):
         except sqlite3.Error:
             return
 
+    @staticmethod
+    def _to_saved_at(value) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return 0
+
+    @staticmethod
+    def _read_latest_saved_at() -> int:
+        if not LOCAL_DB_FILE.exists():
+            return 0
+        try:
+            raw = json.loads(LOCAL_DB_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return 0
+        return FakduHandler._to_saved_at(raw.get("savedAt"))
+
     def _staff_url(self) -> str:
         return f"{self._base_url()}/?{urlencode({'mode': 'staff'})}"
 
@@ -366,6 +383,26 @@ class FakduHandler(SimpleHTTPRequestHandler):
             "sourceMode": payload.get("sourceMode"),
             "db": data
         }
+
+        incoming_saved_at = self._to_saved_at(safe_payload.get("savedAt"))
+        latest_saved_at = self._read_latest_saved_at()
+        if latest_saved_at and incoming_saved_at and incoming_saved_at < latest_saved_at:
+            body = json.dumps({
+                "ok": True,
+                "saved": False,
+                "ignored": True,
+                "reason": "STALE_SNAPSHOT",
+                "latestSavedAt": latest_saved_at,
+                "incomingSavedAt": incoming_saved_at,
+            }, ensure_ascii=False).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         LOCAL_DB_FILE.write_text(json.dumps(safe_payload, ensure_ascii=False), encoding="utf-8")
         digest = self._make_backup_digest(safe_payload)
         if self._should_write_backup(digest):

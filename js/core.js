@@ -908,7 +908,7 @@
   }
 
   function scheduleLocalServerBackup(force = false) {
-    if (IS_CLIENT_NODE) return;
+    if (IS_CLIENT_NODE || state.isStaffMode) return;
     const now = Date.now();
     if (!force && (now - state.lastLocalServerBackupAt) < 800) return;
     clearTimeout(state.localServerBackupTimer);
@@ -926,6 +926,9 @@
           })
         });
         if (response.ok) {
+          let payload = null;
+          try { payload = await response.json(); } catch (_) {}
+          if (payload?.saved === false && payload?.ignored) return;
           state.lastLocalServerBackupAt = Date.now();
           state.lastLocalServerSeenSavedAt = state.lastLocalServerBackupAt;
         }
