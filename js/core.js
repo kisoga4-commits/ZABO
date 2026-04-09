@@ -44,6 +44,7 @@
     bank: '',
     ppay: '',
     qrOffline: '',
+    promptPayDynamic: true,
     adminPin: '1234',
     licenseToken: '',
     licenseActive: false,
@@ -98,14 +99,14 @@
       const params = new URLSearchParams(window.location.search || '');
       const mode = String(params.get('mode') || '').trim().toLowerCase();
       const role = String(params.get('role') || '').trim().toLowerCase();
-      const hasPin = normalizeSyncPin(params.get('pin') || params.get('syncPin') || '').length === 6;
       const forceClientMode = localStorage.getItem(LS_FORCE_CLIENT_MODE) === 'true';
       const rawSession = localStorage.getItem('FAKDU_CLIENT_SESSION');
       const hasClientSession = !!(rawSession && JSON.parse(rawSession || '{}')?.clientSessionToken);
 
       if (mode === 'client' || role === 'client' || mode === 'node' || role === 'node') return true;
+      // ใช้ LAN เป็นหลัก: ลิงก์เครื่องพนักงาน (?mode=staff) ต้องเข้าเป็น client node เสมอ
+      if (mode === 'staff' || mode === 'employee' || role === 'staff' || role === 'employee') return true;
       if (forceClientMode || hasClientSession) return true;
-      if (hasPin && (mode === 'staff' || mode === 'employee' || role === 'staff' || role === 'employee')) return true;
       return false;
     } catch (_) {
       return localStorage.getItem(LS_FORCE_CLIENT_MODE) === 'true';
@@ -303,9 +304,10 @@
     return value === 'transfer' || value === 'qr' || value === 'promptpay';
   }
   function isPromptPayDynamicEnabled() {
-    return localStorage.getItem(LS_PROMPTPAY_DYNAMIC) === 'true';
+    return Boolean(state.db?.promptPayDynamic);
   }
   function setPromptPayDynamicEnabled(enabled) {
+    state.db.promptPayDynamic = Boolean(enabled);
     localStorage.setItem(LS_PROMPTPAY_DYNAMIC, enabled ? 'true' : 'false');
   }
   function escapeHtml(str = '') {
@@ -498,6 +500,7 @@
       bank: String(state.db.bank || ''),
       ppay: String(state.db.ppay || ''),
       qrOffline: String(state.db.qrOffline || ''),
+      promptPayDynamic: Boolean(state.db.promptPayDynamic),
       soundEnabled: Boolean(state.db.soundEnabled)
     };
   }
@@ -548,6 +551,10 @@
     }
     if (Object.prototype.hasOwnProperty.call(settings, 'qrOffline')) {
       state.db.qrOffline = String(settings.qrOffline || '');
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'promptPayDynamic')) {
+      state.db.promptPayDynamic = Boolean(settings.promptPayDynamic);
+      localStorage.setItem(LS_PROMPTPAY_DYNAMIC, state.db.promptPayDynamic ? 'true' : 'false');
     }
     if (Object.prototype.hasOwnProperty.call(settings, 'soundEnabled')) {
       state.db.soundEnabled = Boolean(settings.soundEnabled);
@@ -725,6 +732,12 @@
 
   function normalizeDb(raw) {
     const merged = { ...clone(DEFAULT_DB), ...(raw || {}) };
+    if (raw && Object.prototype.hasOwnProperty.call(raw, 'promptPayDynamic')) {
+      merged.promptPayDynamic = Boolean(raw.promptPayDynamic);
+    } else {
+      merged.promptPayDynamic = localStorage.getItem(LS_PROMPTPAY_DYNAMIC) !== 'false';
+    }
+    localStorage.setItem(LS_PROMPTPAY_DYNAMIC, merged.promptPayDynamic ? 'true' : 'false');
     merged.recovery = { ...clone(DEFAULT_DB.recovery), ...(raw?.recovery || {}) };
     merged.sync = {
       ...clone(DEFAULT_DB.sync),
@@ -1821,7 +1834,10 @@
     state.redeemDraft = [{ orderIndex: Number(orderIndex), pointsPerItem, totalNeed }];
     if (qs('redeem-target-name')) qs('redeem-target-name').textContent = `${target.name} x${qty}`;
     if (qs('redeem-target-cost')) qs('redeem-target-cost').textContent = `ใช้ ${formatMoney(totalNeed)} พอยท์ (฿${formatMoney(target.total)} → ฿0)`;
-    if (qs('redeem-member-keyword')) qs('redeem-member-keyword').value = '';
+    const attachedMember = getMemberById(unit.checkoutMemberId || '');
+    if (qs('redeem-member-keyword')) {
+      qs('redeem-member-keyword').value = attachedMember ? (attachedMember.phone || attachedMember.name || '') : '';
+    }
     if (qs('redeem-member-balance')) {
       qs('redeem-member-balance').textContent = 'ยังไม่ได้ตรวจสอบสมาชิก';
       qs('redeem-member-balance').className = 'text-[11px] font-black text-gray-500 mb-3';
@@ -1839,7 +1855,10 @@
   function checkRedeemMemberBalance() {
     const draft = Array.isArray(state.redeemDraft) ? state.redeemDraft[0] : null;
     if (!draft) return null;
-    const keyword = String(qs('redeem-member-keyword')?.value || '').trim();
+    const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
+    const attachedMember = getMemberById(unit?.checkoutMemberId || '');
+    const keyword = String(qs('redeem-member-keyword')?.value || '').trim()
+      || String(attachedMember?.phone || attachedMember?.name || '').trim();
     if (!keyword) {
       showToast('กรอกชื่อหรือเบอร์สมาชิกก่อน', 'error');
       return null;
@@ -1876,6 +1895,7 @@
     member.points = Math.max(0, Number(member.points || 0) - Number(draft.totalNeed || 0));
     member.updatedAt = Date.now();
     state.db.members[member.id] = member;
+    if (!unit.checkoutMemberId) unit.checkoutMemberId = member.id;
     orderRow.price = 0;
     orderRow.total = 0;
     orderRow.redeemedByPoints = true;

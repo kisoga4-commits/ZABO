@@ -766,8 +766,8 @@ hr {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 8px;
-  padding: 6px 2px;
+  gap: 6px;
+  padding: 4px 2px;
 }
 
 .review-item-main {
@@ -777,15 +777,15 @@ hr {
 .review-item-name {
   font-weight: 900;
   color: #111827;
-  font-size: 13px;
-  line-height: 1.2;
+  font-size: 12px;
+  line-height: 1.15;
   word-break: break-word;
 }
 
 .review-item-price {
-  margin-top: 2px;
+  margin-top: 1px;
   color: #6b7280;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   line-height: 1.1;
 }
@@ -793,35 +793,35 @@ hr {
 .review-item-controls {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 999px;
-  padding: 2px 4px;
+  padding: 1px 3px;
 }
 
 .review-qty-btn {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
   color: #374151;
   font-weight: 900;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1;
 }
 
 .review-qty {
-  min-width: 16px;
+  min-width: 14px;
   text-align: center;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 11px;
   color: #111827;
 }
 
 .review-item-total {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
   color: var(--theme-primary, #111827);
   white-space: nowrap;
