@@ -591,7 +591,7 @@
         <div class="modal-content bg-white p-5">
             <div class="flex items-center justify-between mb-2">
                 <h3 class="font-black text-xl text-gray-800">🎁 แลกพอยท์รายการนี้</h3>
-                <button onclick="closeModal('modal-redeem-points')" class="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 font-black">✕</button>
+                <button onclick="closeRedeemPointsModal()" class="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 font-black">✕</button>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3">
                 <div id="redeem-target-name" class="font-black text-sm text-gray-800">-</div>
@@ -602,7 +602,7 @@
             <button onclick="checkRedeemMemberBalance()" class="w-full mb-2 bg-slate-800 text-white py-2.5 rounded-xl text-[11px] font-black active:scale-95">ตรวจสอบพอยท์</button>
             <p id="redeem-member-balance" class="text-[11px] font-black text-gray-500 mb-3">ยังไม่ได้ตรวจสอบสมาชิก</p>
             <div class="mt-4 grid grid-cols-2 gap-3">
-                <button onclick="closeModal('modal-redeem-points')" class="bg-gray-100 text-gray-600 py-3 rounded-xl font-black text-sm active:scale-95">ยกเลิก</button>
+                <button onclick="closeRedeemPointsModal()" class="bg-gray-100 text-gray-600 py-3 rounded-xl font-black text-sm active:scale-95">ยกเลิก</button>
                 <button onclick="applyRedeemPointsSelection()" class="bg-emerald-500 text-white py-3 rounded-xl font-black text-sm active:scale-95">ยืนยันแลกพอยท์</button>
             </div>
         </div>

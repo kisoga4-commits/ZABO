@@ -908,7 +908,12 @@
   }
 
   function scheduleLocalServerBackup(force = false) {
-    if (IS_CLIENT_NODE || state.isStaffMode) return;
+    // อนุญาต staff mode (เครื่องพนักงานที่เข้า ?mode=staff) ส่ง snapshot เข้า local server ได้ด้วย
+    // เพื่อให้ master ดึงผ่าน SSE/poll ได้แบบเรียลไทม์
+    if (IS_CLIENT_NODE) return;
+    // กันเคสเครื่องพนักงานยังไม่เคย pull snapshot ล่าสุดจากเครื่องแม่ แล้วดัน push DB เก่าทับค่าใหม่
+    // (เช่น ค่า bank/พร้อมเพย์/QR) ทำให้หน้าเช็คบิลเห็น QR โชว์แล้วหาย
+    if (!force && state.isStaffMode && Number(state.lastLocalServerSeenSavedAt || 0) <= 0) return;
     const now = Date.now();
     if (!force && (now - state.lastLocalServerBackupAt) < 800) return;
     clearTimeout(state.localServerBackupTimer);
@@ -1755,6 +1760,7 @@
   }
 
   function openRedeemPointsModal(orderIndex) {
+    closeModal('modal-checkout');
     const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
     if (!unit) return;
     const target = unit.orders[Number(orderIndex)];
@@ -1773,6 +1779,13 @@
       qs('redeem-member-balance').className = 'text-[11px] font-black text-gray-500 mb-3';
     }
     openModal('modal-redeem-points');
+  }
+
+  function closeRedeemPointsModal(restoreCheckout = true) {
+    closeModal('modal-redeem-points');
+    if (!restoreCheckout) return;
+    if (state.activeUnitId == null) return;
+    openCheckout(Number(state.activeUnitId));
   }
 
   function checkRedeemMemberBalance() {
@@ -1830,7 +1843,7 @@
       pointsPerItem: Number(draft.pointsPerItem || 0)
     });
     state.redeemDraft = [];
-    closeModal('modal-redeem-points');
+    closeRedeemPointsModal(false);
     saveDb({ render: true, sync: true });
     openCheckout(unit.id);
     showToast(`แลกรายการสำเร็จ ใช้ ${formatMoney(draft.totalNeed || 0)} พอยท์`, 'success');
@@ -4923,6 +4936,7 @@
     deleteOrderItem,
     confirmPayment,
     openRedeemPointsModal,
+    closeRedeemPointsModal,
     checkRedeemMemberBalance,
     applyRedeemPointsSelection,
     switchManageSub,
