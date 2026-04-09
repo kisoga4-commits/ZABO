@@ -482,8 +482,12 @@ hr {
   transition: all 0.2s ease;
 }
 
+.cart-dock {
+  backdrop-filter: blur(6px);
+}
+
 #item-list > button {
-  min-height: 96px;
+  min-height: 78px;
 }
 
 .send-order-btn.is-disabled {
@@ -1288,7 +1292,8 @@ hr {
     margin-bottom: 138px !important;
   }
 
-  #screen-order > .fixed {
+  #screen-order > .fixed,
+  .cart-dock {
     max-width: calc(100vw - 8px) !important;
     border-radius: 18px 18px 0 0 !important;
     padding: 12px 12px 18px !important;
