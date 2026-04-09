@@ -92,11 +92,8 @@
         </div>
         <div id="staff-connect-panel" class="hidden mb-3 bg-white border border-blue-100 rounded-2xl p-3">
             <div class="text-[11px] font-black text-blue-700 mb-1">เชื่อมต่อกับเครื่องหลัก</div>
-            <p class="text-[10px] text-gray-500 font-bold mb-2">ขอรหัส 6 หลักจากเครื่องหลัก แล้วกรอกเพื่อส่งคำขอเชื่อมต่อ</p>
-            <div class="flex gap-2">
-                <input id="manual-pin-visible" type="text" maxlength="6" inputmode="numeric" placeholder="กรอกรหัส 6 หลัก" class="flex-1 border-2 p-3 rounded-xl text-sm font-black bg-gray-50 outline-none focus:border-primary tracking-[0.2em] uppercase text-center">
-                <button onclick="submitClientAccessRequestFromModal()" class="px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-black active:scale-95">เชื่อมต่อ</button>
-            </div>
+            <p class="text-[10px] text-gray-500 font-bold mb-2">เปิดลิงก์/สแกน QR จากเครื่องหลัก ระบบจะเชื่อมต่อให้อัตโนมัติ</p>
+            <button onclick="submitClientAccessRequestFromModal()" class="w-full px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-black active:scale-95">เชื่อมต่อทันที</button>
         </div>
         <div id="grid-units" class="grid grid-cols-2 gap-4"></div>
     </section>
@@ -210,6 +207,12 @@
         </div>
 
         <div id="sub-menu" class="hidden">
+            <div class="flex bg-gray-100 p-1.5 rounded-2xl border mb-4">
+                <button id="menu-manage-tab-menu" onclick="switchMenuManageTab('menu', this)" class="flex-1 rounded-xl bg-white text-gray-800 text-xs font-black py-2 shadow-sm">📦 รายการเมนู</button>
+                <button id="menu-manage-tab-redeem" onclick="switchMenuManageTab('redeem', this)" class="flex-1 rounded-xl text-gray-500 text-xs font-black py-2">🎁 เมนูแลกแต้ม</button>
+            </div>
+
+            <div id="menu-manage-pane-menu">
             <div class="bg-gray-50 p-5 rounded-[24px] border mb-6">
                 <h3 class="font-black text-sm mb-4">🪑 ตั้งค่าจำนวนโต๊ะ/คิว</h3>
                 <div class="flex gap-3">
@@ -232,7 +235,9 @@
                 </div>
                 <div id="admin-menu-list" class="space-y-4"></div>
             </div>
+            </div>
 
+            <div id="menu-manage-pane-redeem" class="hidden">
             <div class="bg-white p-5 rounded-[24px] border shadow-sm mt-6">
                 <div class="flex items-start justify-between gap-3 mb-4">
                     <div>
@@ -248,6 +253,7 @@
                     หากติ๊กเปิดสิทธิ์ ต้องใส่แต้มมากกว่า 0
                 </div>
                 <div id="redeem-config-list" class="space-y-2"></div>
+            </div>
             </div>
         </div>
     </section>
@@ -407,26 +413,20 @@
             <div class="flex items-start justify-between gap-3 mb-4">
                 <div>
                     <h3 class="font-black text-xl text-gray-800">📲 เชื่อมเครื่องพนักงาน</h3>
-                    <p class="text-[11px] text-gray-500 font-bold">ให้เครื่องพนักงานเปิดลิงก์นี้ แล้วใช้รหัส 6 หลักด้านล่างเพื่อเชื่อมต่อ</p>
+                    <p class="text-[11px] text-gray-500 font-bold">ให้เครื่องพนักงานเปิดลิงก์/สแกน QR นี้ แล้วระบบจะส่งคำขอเชื่อมต่อทันที</p>
                 </div>
                 <button onclick="closeModal('modal-staff-link')" class="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 font-black">✕</button>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                <div class="bg-slate-900 text-white rounded-2xl px-4 py-3">
-                    <div class="text-[10px] uppercase tracking-wide text-slate-200 font-black mb-1">รหัสเชื่อมต่อ</div>
-                    <div id="display-sync-key" class="text-3xl tracking-[0.3em] font-black text-center">------</div>
-                </div>
-                <div class="bg-white border rounded-2xl p-3 flex items-center justify-center min-h-[132px]">
-                    <div id="sync-qr-area" class="w-[86px] h-[86px] flex items-center justify-center text-[10px] text-gray-400 font-black">กำลังสร้าง QR...</div>
-                </div>
+            <div class="bg-white border rounded-2xl p-3 flex items-center justify-center min-h-[132px] mb-3">
+                <div id="sync-qr-area" class="w-[110px] h-[110px] flex items-center justify-center text-[10px] text-gray-400 font-black">กำลังสร้าง QR...</div>
             </div>
             <div class="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-[10px] text-blue-700 font-black mb-3">
-                QR นี้ให้เครื่องพนักงานสแกน (ไม่ใช่เครื่องหลัก)
+                QR นี้ให้เครื่องพนักงานสแกนเพื่อเข้าเว็บโหมดพนักงาน (mode=staff)
             </div>
             <div class="mb-3">
                 <button onclick="copyEmployeeLink()" class="w-full px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-black active:scale-95">🔗 คัดลอกลิงก์เครื่องพนักงาน</button>
             </div>
-            <button onclick="requestNewSyncKey()" class="w-full bg-amber-100 border border-amber-200 text-amber-800 rounded-2xl py-3 font-black text-sm active:scale-95 mb-2">รีเซ็ต PIN Sync</button>
+            <button onclick="requestNewSyncKey()" class="w-full bg-amber-100 border border-amber-200 text-amber-800 rounded-2xl py-3 font-black text-sm active:scale-95 mb-2">รีเซ็ตลิงก์พนักงาน</button>
             <button id="btn-manual-sync" onclick="triggerSyncCheck()" class="w-full bg-white text-blue-600 border border-blue-200 py-3 rounded-xl font-black text-sm active:scale-95">เช็คสถานะซิงก์</button>
         </div>
     </div>

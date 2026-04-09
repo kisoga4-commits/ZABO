@@ -9,8 +9,8 @@ class SyncContractSmokeTest(unittest.TestCase):
         cls.core = Path('js/core.js').read_text(encoding='utf-8')
         cls.index = Path('index.html').read_text(encoding='utf-8')
 
-    def test_system_mode_has_pin_reset_controls(self):
-        self.assertIn('id="display-sync-key"', self.index)
+    def test_system_mode_has_staff_link_reset_controls(self):
+        self.assertIn('id="sync-qr-area"', self.index)
         self.assertIn('id="modal-sync-key-confirm"', self.index)
         self.assertIn('onclick="requestNewSyncKey()"', self.index)
         self.assertIn('onclick="confirmNewSyncKey()"', self.index)
