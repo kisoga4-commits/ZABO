@@ -322,6 +322,7 @@
     const maxWidth = Math.max(320, Number(options.maxWidth || 1024));
     const maxBytes = Math.max(80 * 1024, Number(options.maxBytes || 300 * 1024));
     const outputType = String(options.outputType || 'image/jpeg');
+    const cropSquare = Boolean(options.cropSquare);
     const fallbackDataUrl = await readFileAsDataURL(file);
     if (!file.type || !file.type.startsWith('image/')) return fallbackDataUrl;
 
@@ -331,9 +332,14 @@
       const srcH = Number(sourceImage.naturalHeight || sourceImage.height || 0);
       if (!srcW || !srcH) return fallbackDataUrl;
 
-      const scale = Math.min(1, maxWidth / srcW);
-      const drawW = Math.max(1, Math.round(srcW * scale));
-      const drawH = Math.max(1, Math.round(srcH * scale));
+      const cropSize = cropSquare ? Math.min(srcW, srcH) : 0;
+      const sx = cropSquare ? Math.floor((srcW - cropSize) / 2) : 0;
+      const sy = cropSquare ? Math.floor((srcH - cropSize) / 2) : 0;
+      const baseW = cropSquare ? cropSize : srcW;
+      const baseH = cropSquare ? cropSize : srcH;
+      const scale = Math.min(1, maxWidth / baseW);
+      const drawW = Math.max(1, Math.round(baseW * scale));
+      const drawH = Math.max(1, Math.round(baseH * scale));
       const canvas = document.createElement('canvas');
       canvas.width = drawW;
       canvas.height = drawH;
@@ -341,16 +347,20 @@
       if (!ctx) return fallbackDataUrl;
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, drawW, drawH);
-      ctx.drawImage(sourceImage, 0, 0, drawW, drawH);
+      if (cropSquare) {
+        ctx.drawImage(sourceImage, sx, sy, cropSize, cropSize, 0, 0, drawW, drawH);
+      } else {
+        ctx.drawImage(sourceImage, 0, 0, drawW, drawH);
+      }
 
       if (outputType === 'image/png') {
         return canvas.toDataURL('image/png');
       }
 
-      let quality = 0.86;
+      let quality = 0.82;
       let candidate = canvas.toDataURL(outputType, quality);
-      while (candidate.length > maxBytes * 1.37 && quality > 0.5) {
-        quality -= 0.08;
+      while (candidate.length > maxBytes * 1.37 && quality > 0.4) {
+        quality -= 0.07;
         candidate = canvas.toDataURL(outputType, quality);
       }
       return candidate.length < fallbackDataUrl.length ? candidate : fallbackDataUrl;
@@ -498,7 +508,7 @@
     return `MSG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
   }
   function resolveFirebaseSyncApi() {
-    // LAN-first build: disabled cloud adapter path to reduce runtime overhead.
+    // LAN-first deployment: disable cloud adapter to keep runtime lean and offline-safe.
     return null;
   }
   function getClientStatus(client) {
@@ -818,7 +828,7 @@
       renderCheckoutMemberHint('ยังไม่พบสมาชิก: พิมพ์ชื่อหรือเบอร์ แล้วปิดบิลเพื่อสมัครทันที', 'warn');
       return null;
     }
-    renderCheckoutMemberHint(`สมาชิกเดิม: ${member.name || member.phone} (${formatMoney(member.points)} แต้ม)`, 'success');
+    renderCheckoutMemberHint(`สมาชิกเดิม: ${member.name || member.phone} (${formatMoney(member.points)} พอยท์)`, 'success');
     return member;
   }
 
@@ -1370,19 +1380,19 @@
       return;
     }
     list.innerHTML = state.db.items.map((item, index) => `
-      <button onclick="handleItemClickByIndex(${index})" class="w-full bg-white p-3 rounded-[24px] border shadow-sm flex gap-3 active:scale-[0.99]">
+      <button onclick="handleItemClickByIndex(${index})" class="w-full bg-white p-2.5 rounded-[20px] border shadow-sm flex gap-2.5 active:scale-[0.99]">
         ${item.img
-          ? `<img src="${item.img}" class="w-20 h-20 rounded-[18px] object-cover bg-gray-100">`
-          : `<div class="w-20 h-20 rounded-[18px] bg-gray-100 flex items-center justify-center text-3xl">🍽️</div>`}
+          ? `<img src="${item.img}" class="w-16 h-16 rounded-[14px] object-cover bg-gray-100">`
+          : `<div class="w-16 h-16 rounded-[14px] bg-gray-100 flex items-center justify-center text-2xl">🍽️</div>`}
         <div class="flex-1 text-left min-w-0">
           <div class="flex justify-between gap-2 items-start">
-            <div class="font-black text-lg text-gray-800 truncate">${escapeHtml(item.name)}</div>
-            <div class="font-black theme-text text-xl whitespace-nowrap">฿${formatMoney(item.price)}</div>
+            <div class="font-black text-base text-gray-800 truncate">${escapeHtml(item.name)}</div>
+            <div class="font-black theme-text text-lg whitespace-nowrap">฿${formatMoney(item.price)}</div>
           </div>
-          <div class="mt-2 text-[11px] text-gray-500 font-bold">${item.addons?.length ? `มีรายการเสริม ${item.addons.length} ตัวเลือก` : 'แตะเพื่อใส่ตะกร้า'}</div>
-          <div class="mt-2 flex flex-wrap gap-1.5">
+          <div class="mt-1.5 text-[10px] text-gray-500 font-bold">${item.addons?.length ? `มีรายการเสริม ${item.addons.length} ตัวเลือก` : 'แตะเพื่อใส่ตะกร้า'}</div>
+          <div class="mt-1.5 flex flex-wrap gap-1">
             ${item.addons?.length ? '<div class="inline-flex px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black">+ Add-on</div>' : ''}
-            ${Number(item.redeemPoints || 0) > 0 ? `<div class="inline-flex px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black">แลก ${formatMoney(item.redeemPoints)} แต้ม</div>` : ''}
+            ${Number(item.redeemPoints || 0) > 0 ? `<div class="inline-flex px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black">แลก ${formatMoney(item.redeemPoints)} พอยท์</div>` : ''}
           </div>
         </div>
       </button>
@@ -1732,7 +1742,7 @@
         <div class="flex justify-between items-center gap-3 py-3">
           <div class="min-w-0 flex-1">
             <div class="font-black text-gray-800 truncate">${escapeHtml(row.name)}</div>
-            <div class="text-[10px] text-gray-400 font-bold mt-1">${thaiDate(row.createdAt)}${row.redeemedByPoints ? ` • แลก ${formatMoney(row.redeemPoints || 0)} แต้ม/ชิ้น` : ''}</div>
+            <div class="text-[10px] text-gray-400 font-bold mt-1">${thaiDate(row.createdAt)}${row.redeemedByPoints ? ` • แลก ${formatMoney(row.redeemPoints || 0)} พอยท์/ชิ้น` : ''}</div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <div class="font-black">x${row.qty}</div>
@@ -1757,15 +1767,15 @@
 
   function openRedeemPointsModal() {
     const member = getCheckoutResolvedMember();
-    if (!member) return showToast('กรุณากรอกเบอร์โทรหรือชื่อสมาชิกก่อนกดแลกแต้ม', 'error');
+    if (!member) return showToast('กรุณากรอกเบอร์โทรหรือชื่อสมาชิกก่อนกดแลกพอยท์', 'error');
     const redeemable = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
     if (!redeemable.length) {
-      showToast('ยังไม่มีเมนูที่ตั้งค่าแลกแต้ม', 'error');
+      showToast('ยังไม่มีเมนูที่ตั้งค่าแลกพอยท์', 'error');
       return;
     }
     state.redeemDraft = [];
     const balanceEl = qs('redeem-member-balance');
-    if (balanceEl) balanceEl.textContent = `แต้มคงเหลือ: ${formatMoney(member.points || 0)}`;
+    if (balanceEl) balanceEl.textContent = `พอยท์คงเหลือ: ${formatMoney(member.points || 0)}`;
     const list = qs('redeem-menu-list');
     if (list) {
       list.innerHTML = redeemable.map((item) => `
@@ -1773,7 +1783,7 @@
           <div class="flex justify-between items-start gap-2">
             <div class="min-w-0">
               <div class="font-black text-sm text-gray-800 truncate">${escapeHtml(item.name)}</div>
-              <div class="text-[10px] text-gray-500 font-bold">ปกติ ฿${formatMoney(item.price)} • แลก ${formatMoney(item.redeemPoints)} แต้ม</div>
+              <div class="text-[10px] text-gray-500 font-bold">ปกติ ฿${formatMoney(item.price)} • แลก ${formatMoney(item.redeemPoints)} พอยท์</div>
             </div>
             <input id="redeem-qty-${escapeHtml(item.id)}" type="number" min="0" step="1" value="0" class="w-16 border rounded-lg p-1.5 text-center font-black text-sm" />
           </div>
@@ -1785,11 +1795,11 @@
 
   function applyRedeemPointsSelection() {
     const member = getCheckoutResolvedMember();
-    if (!member) return showToast('ไม่พบสมาชิกสำหรับแลกแต้ม', 'error');
+    if (!member) return showToast('ไม่พบสมาชิกสำหรับแลกพอยท์', 'error');
     const unit = state.db.units.find((row) => row.id === Number(state.activeUnitId));
     if (!unit) return;
     const redeemable = state.db.items.filter((item) => Number(item.redeemPoints || 0) > 0);
-    if (!redeemable.length) return showToast('ยังไม่มีเมนูแลกแต้ม', 'error');
+    if (!redeemable.length) return showToast('ยังไม่มีเมนูแลกพอยท์', 'error');
 
     const picked = [];
     let totalNeed = 0;
@@ -1801,14 +1811,14 @@
       totalNeed += lineNeed;
       picked.push({ item, qty, points, lineNeed });
     });
-    if (!picked.length) return showToast('ยังไม่ได้เลือกเมนูแลกแต้ม', 'error');
-    if (totalNeed > Number(member.points || 0)) return showToast('แต้มไม่พอ', 'error');
+    if (!picked.length) return showToast('ยังไม่ได้เลือกเมนูแลกพอยท์', 'error');
+    if (totalNeed > Number(member.points || 0)) return showToast('พอยท์ไม่พอ', 'error');
 
     picked.forEach(({ item, qty, points }) => {
       unit.orders.push({
         id: `ORD-RDM-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         itemId: item.id,
-        name: `${item.name} (แลกแต้ม)`,
+        name: `${item.name} (แลกพอยท์)`,
         qty,
         price: 0,
         total: 0,
@@ -1827,7 +1837,7 @@
     closeModal('modal-redeem-points');
     saveDb({ render: true, sync: true });
     openCheckout(unit.id);
-    showToast(`เพิ่มเมนูแลกแต้มให้ ${member.name || member.phone || 'สมาชิก'} แล้ว (${formatMoney(totalNeed)} แต้ม)`, 'success');
+    showToast(`เพิ่มเมนูแลกพอยท์ให้ ${member.name || member.phone || 'สมาชิก'} แล้ว (${formatMoney(totalNeed)} พอยท์)`, 'success');
   }
 
   function updateQrDisplay() {
@@ -1847,6 +1857,22 @@
       height: 150,
       shopName: state.db.shopName
     });
+    const mustUseMasterQr = IS_CLIENT_NODE;
+
+    if (mustUseMasterQr) {
+      if (state.db.qrOffline) {
+        offlineImg.src = state.db.qrOffline;
+        offlineImg.classList.remove('hidden');
+        status.textContent = state.db.bank && state.db.ppay
+          ? `${state.db.bank} • ${state.db.ppay} (Sync จากเครื่องแม่)`
+          : 'Sync QR จากเครื่องแม่แล้ว';
+        return;
+      }
+      genArea.classList.remove('hidden');
+      genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่มี QR จากเครื่องแม่<br>กรุณาอัปโหลด QR ที่เครื่องแม่ก่อน</div>';
+      status.textContent = 'รอซิงค์ QR จากเครื่องแม่';
+      return;
+    }
 
     if (!isDynamicEnabled) {
       if (state.db.qrOffline) {
@@ -1873,7 +1899,6 @@
       status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic)`;
       return;
     }
-
     if (state.db.qrOffline) {
       offlineImg.src = state.db.qrOffline;
       offlineImg.classList.remove('hidden');
@@ -1949,7 +1974,7 @@
       });
       const currentPoints = Number(nextMember.points || 0);
       if (usedPoints > currentPoints) {
-        return showToast('แต้มสมาชิกไม่พอสำหรับรายการแลกแต้ม', 'error');
+        return showToast('พอยท์สมาชิกไม่พอสำหรับรายการแลกพอยท์', 'error');
       }
       nextMember.points = currentPoints - usedPoints;
       const paidAmountForPoint = Math.max(0, total);
@@ -1998,8 +2023,8 @@
     closeModal('modal-checkout');
     saveDb({ render: true, sync: true });
     const paidText = method === 'transfer' ? 'ปิดบิล (โอน/QR) แล้ว' : 'ปิดบิล (เงินสด) แล้ว';
-    const usedText = memberSnapshot?.usedPoints ? ` ใช้ ${memberSnapshot.usedPoints} แต้ม` : '';
-    const pointText = memberSnapshot?.earnedPoints ? ` +${memberSnapshot.earnedPoints} แต้ม` : '';
+    const usedText = memberSnapshot?.usedPoints ? ` ใช้ ${memberSnapshot.usedPoints} พอยท์` : '';
+    const pointText = memberSnapshot?.earnedPoints ? ` +${memberSnapshot.earnedPoints} พอยท์` : '';
     showToast(`${paidText}${usedText}${pointText}`, 'success');
     if (state.activeTab === 'shop') renderShopQueue();
     if (state.activeTab === 'manage') renderAnalytics();
@@ -2361,7 +2386,7 @@
               <div class="min-w-0">
                 <div class="font-black text-lg text-gray-800 truncate">${escapeHtml(item.name)}</div>
                 <div class="text-[11px] text-gray-500 font-bold mt-1">฿${formatMoney(item.price)}</div>
-                ${Number(item.redeemPoints || 0) > 0 ? `<div class="text-[10px] text-emerald-700 font-black mt-1">แลก ${formatMoney(item.redeemPoints)} แต้ม</div>` : ''}
+                ${Number(item.redeemPoints || 0) > 0 ? `<div class="text-[10px] text-emerald-700 font-black mt-1">แลก ${formatMoney(item.redeemPoints)} พอยท์</div>` : ''}
               </div>
               <div class="flex gap-2 shrink-0">
                 <button onclick="editItem('${item.id}')" class="px-3 py-2 rounded-xl bg-white border text-blue-600 text-xs font-black">แก้ไข</button>
@@ -2411,9 +2436,9 @@
               class="w-24 border rounded-lg px-2 py-1.5 text-sm font-black text-center ${checked ? 'bg-white' : 'bg-gray-100'}"
               ${checked ? '' : 'disabled'}
             />
-            <span class="text-[10px] font-black text-gray-500">แต้ม/ชิ้น</span>
+            <span class="text-[10px] font-black text-gray-500">พอยท์/ชิ้น</span>
             <button onclick="saveRedeemEligibility('${escapeHtml(item.id)}')" class="ml-auto px-3 py-1.5 rounded-lg text-[10px] font-black ${checked ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}" ${checked ? '' : 'disabled'}>
-              บันทึกแต้ม
+              บันทึกพอยท์
             </button>
           </div>
         </div>`;
@@ -2435,43 +2460,43 @@
     const target = state.db.items.find((row) => String(row.id) === String(itemId));
     if (!target) return showToast('ไม่พบเมนู', 'error');
     if (!applyItemRedeemPoints(itemId, 10)) return;
-    showToast(`เปิดสิทธิ์แลกแต้มให้ ${target.name} แล้ว`, 'success');
+    showToast(`เปิดสิทธิ์แลกพอยท์ให้ ${target.name} แล้ว`, 'success');
   }
 
   function quickEditRedeemItem(itemId) {
     const target = state.db.items.find((row) => String(row.id) === String(itemId));
     if (!target) return showToast('ไม่พบเมนู', 'error');
     const points = Math.max(1, Number(target.redeemPoints || 1));
-    if (!points) return showToast('แต้มต้องมากกว่า 0 (หากต้องการปิดสิทธิ์ ให้กดปุ่มลบสิทธิ์)', 'error');
+    if (!points) return showToast('พอยท์ต้องมากกว่า 0 (หากต้องการปิดสิทธิ์ ให้กดปุ่มลบสิทธิ์)', 'error');
     if (!applyItemRedeemPoints(itemId, points)) return;
-    showToast(`อัปเดตแต้มของ ${target.name} แล้ว`, 'success');
+    showToast(`อัปเดตพอยท์ของ ${target.name} แล้ว`, 'success');
   }
 
   function quickDisableRedeemItem(itemId) {
     const target = state.db.items.find((row) => String(row.id) === String(itemId));
     if (!target) return showToast('ไม่พบเมนู', 'error');
     if (!applyItemRedeemPoints(itemId, 0)) return;
-    showToast(`ลบสิทธิ์แลกแต้มของ ${target.name} แล้ว`, 'success');
+    showToast(`ลบสิทธิ์แลกพอยท์ของ ${target.name} แล้ว`, 'success');
   }
 
   function toggleRedeemEligibility(itemId, checked) {
     const input = qs(`redeem-point-input-${itemId}`);
     if (!checked) {
       if (!applyItemRedeemPoints(itemId, 0)) return;
-      showToast('ปิดสิทธิ์แลกแต้มแล้ว', 'success');
+      showToast('ปิดสิทธิ์แลกพอยท์แล้ว', 'success');
       return;
     }
     const points = Math.max(1, Math.floor(Number(input?.value || 1)));
     if (!applyItemRedeemPoints(itemId, points)) return;
-    showToast(`เปิดสิทธิ์แลกแต้ม ${formatMoney(points)} แต้ม/ชิ้น`, 'success');
+    showToast(`เปิดสิทธิ์แลกพอยท์ ${formatMoney(points)} พอยท์/ชิ้น`, 'success');
   }
 
   function saveRedeemEligibility(itemId) {
     const input = qs(`redeem-point-input-${itemId}`);
     const points = Math.max(1, Math.floor(Number(input?.value || 0)));
-    if (!points) return showToast('แต้มต้องมากกว่า 0', 'error');
+    if (!points) return showToast('พอยท์ต้องมากกว่า 0', 'error');
     if (!applyItemRedeemPoints(itemId, points)) return;
-    showToast(`บันทึกแต้ม ${formatMoney(points)} แต้ม/ชิ้นแล้ว`, 'success');
+    showToast(`บันทึกพอยท์ ${formatMoney(points)} พอยท์/ชิ้นแล้ว`, 'success');
   }
 
   function openMenuModal(itemId = null) {
@@ -2730,7 +2755,7 @@
         <div class="min-w-0">
           <div class="font-black text-sm text-slate-800 truncate">${escapeHtml(member.name || '-')}</div>
           <div class="text-[10px] font-bold text-gray-500 truncate">${escapeHtml(member.phone || 'ไม่มีเบอร์โทร')}</div>
-          <div class="text-[10px] font-black text-emerald-600 mt-1">แต้ม ${formatMoney(member.points || 0)}</div>
+          <div class="text-[10px] font-black text-emerald-600 mt-1">พอยท์ ${formatMoney(member.points || 0)}</div>
         </div>
         <div class="flex flex-col gap-1 shrink-0">
           <button onclick="editMemberFromSystem('${escapeHtml(member.id)}')" class="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-[10px] font-black">แก้ไข</button>
@@ -2750,7 +2775,18 @@
         qr: { maxWidth: 1100, maxBytes: 420 * 1024, outputType: 'image/png' },
         temp: { maxWidth: 960, maxBytes: 320 * 1024 }
       };
-      result = await optimizeImageFile(file, typeConfig[type] || {});
+      const optimizeConfig = { ...(typeConfig[type] || {}) };
+      if (type === 'logo') {
+        optimizeConfig.cropSquare = true;
+        optimizeConfig.maxWidth = 640;
+        optimizeConfig.maxBytes = 180 * 1024;
+      }
+      if (type === 'temp') {
+        optimizeConfig.cropSquare = true;
+        optimizeConfig.maxWidth = 720;
+        optimizeConfig.maxBytes = 210 * 1024;
+      }
+      result = await optimizeImageFile(file, optimizeConfig);
     } catch (_) {
       result = await readFileAsDataURL(file);
     }
