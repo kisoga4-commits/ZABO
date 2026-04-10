@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import queue
+import re
 import socket
 import sqlite3
 import threading
@@ -14,11 +16,20 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from hashlib import sha256
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from urllib.parse import quote, urlencode, urlparse
 
-LOCAL_DB_FILE = Path(__file__).resolve().with_name("fakdu.localdb.json")
-LOCAL_DB_SQLITE_FILE = Path(__file__).resolve().with_name("fakdu.localdb.sqlite3")
-LOCAL_DB_BACKUP_DIR = Path(__file__).resolve().with_name("fakdu.localdb.backups")
+def _default_storage_namespace() -> str:
+    raw = os.environ.get("FAKDU_STORAGE_NAMESPACE") or Path(__file__).resolve().parent.name or "default"
+    cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "-", str(raw).strip().lower()).strip("-._")
+    return cleaned or "default"
+
+
+APP_STORAGE_NAMESPACE = _default_storage_namespace()
+LOCAL_DB_ROOT = Path.home() / ".fakdu-data" / APP_STORAGE_NAMESPACE
+LOCAL_DB_FILE = LOCAL_DB_ROOT / "fakdu.localdb.json"
+LOCAL_DB_SQLITE_FILE = LOCAL_DB_ROOT / "fakdu.localdb.sqlite3"
+LOCAL_DB_BACKUP_DIR = LOCAL_DB_ROOT / "fakdu.localdb.backups"
 LOCAL_DB_BACKUP_PREFIX = "fakdu.localdb."
 LOCAL_DB_BACKUP_SUFFIX = ".json"
 LOCAL_DB_RETENTION_DAYS = 30
@@ -59,6 +70,14 @@ class LocalDbEventBus:
 
 
 LOCAL_DB_EVENT_BUS = LocalDbEventBus()
+
+
+def _atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile("w", encoding=encoding, dir=path.parent, delete=False) as tmp:
+        tmp.write(content)
+        tmp.flush()
+        Path(tmp.name).replace(path)
 
 
 class FakduHandler(SimpleHTTPRequestHandler):
@@ -324,7 +343,7 @@ class FakduHandler(SimpleHTTPRequestHandler):
         now_utc = datetime.now(timezone.utc)
         payload_json = json.dumps(safe_payload, ensure_ascii=False)
         payload_digest = sha256(payload_json.encode("utf-8")).hexdigest()
-        LOCAL_DB_FILE.write_text(payload_json, encoding="utf-8")
+        _atomic_write_text(LOCAL_DB_FILE, payload_json, encoding="utf-8")
 
         should_insert_snapshot = True
         handler_cls = type(self)
@@ -389,6 +408,7 @@ def main() -> None:
     with ThreadingHTTPServer((args.host, args.port), FakduHandler) as httpd:
         print(f"FAKDU server running at http://{args.host}:{args.port}")
         print(f"Employee QR page: http://{args.host}:{args.port}/employee-qr")
+        print(f"Local DB namespace: {APP_STORAGE_NAMESPACE} -> {LOCAL_DB_ROOT}")
         httpd.serve_forever()
 
 

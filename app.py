@@ -7,7 +7,7 @@ import socket
 import webbrowser
 from http.server import ThreadingHTTPServer
 
-from server import FakduHandler
+from server import APP_STORAGE_NAMESPACE, LOCAL_DB_ROOT, FakduHandler
 
 HOST = "0.0.0.0"
 PORT = 8000
@@ -42,6 +42,7 @@ def main() -> None:
         print(f"FAKDU server running at http://127.0.0.1:{PORT}")
         print(f"Master machine URL (LAN): http://{master_ip}:{PORT}")
         print(f"Employee QR page: http://{master_ip}:{PORT}/employee-qr")
+        print(f"Local DB namespace: {APP_STORAGE_NAMESPACE} -> {LOCAL_DB_ROOT}")
         try:
             webbrowser.open(f"http://127.0.0.1:{PORT}")
         except Exception:
