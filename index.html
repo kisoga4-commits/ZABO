@@ -626,21 +626,6 @@
                 <p id="qr-status-text" class="text-[9px] text-gray-400 mt-2"></p>
             </div>
             <div class="p-5 bg-white border-t relative z-10">
-                <div class="mb-3 bg-gray-50 border border-gray-200 rounded-2xl p-3">
-                    <button onclick="toggleCheckoutMemberSection()" class="w-full flex items-center justify-between gap-2 bg-white border border-gray-200 px-3 py-2.5 rounded-xl">
-                        <span class="text-[11px] text-gray-600 font-black uppercase tracking-wider">ลูกค้าเป็นสมาชิก</span>
-                        <span id="checkout-member-toggle-label" class="text-[10px] font-black text-primary">กดเพื่อกรอก</span>
-                    </button>
-                    <div id="checkout-member-fields" class="hidden mt-2">
-                        <label for="checkout-member-keyword" class="text-[10px] text-gray-500 font-black uppercase tracking-wider block mb-2">กรอกเบอร์โทร หรือชื่อสมาชิก</label>
-                        <div class="flex gap-2 mb-2">
-                            <input id="checkout-member-keyword" type="text" placeholder="เบอร์โทร หรือ ชื่อสมาชิก" class="flex-1 border-2 p-3 rounded-xl text-sm font-bold bg-white outline-none focus:border-primary" oninput="lookupCheckoutMember(this.value)">
-                            <button onclick="applyCheckoutMemberLookup()" class="px-3 rounded-xl bg-slate-800 text-white text-[11px] font-black active:scale-95">ค้นหา</button>
-                        </div>
-                        <button onclick="openRedeemPointsModal()" class="w-full px-3 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-black active:scale-95">🎁 แลกแต้ม</button>
-                    </div>
-                    <p id="checkout-member-hint" class="text-[10px] text-gray-400 font-bold mt-2">ไม่กรอก = ลูกค้าทั่วไป</p>
-                </div>
                 <div id="checkout-payment-buttons" class="flex gap-2 mb-2">
                     <button onclick="confirmPayment('cash')" class="flex-1 bg-emerald-500 text-white py-4 rounded-[20px] font-black shadow-lg text-sm active:scale-95">💵 เงินสด</button>
                     <button onclick="confirmPayment('transfer')" class="flex-1 bg-blue-500 text-white py-4 rounded-[20px] font-black shadow-lg text-sm active:scale-95">📱 โอน/QR</button>
@@ -651,22 +636,28 @@
     </div>
     <!--** modal-checkout close -->
 
-    <!--* modal-redeem-points open -->
-    <div class="modal-overlay hidden" id="modal-redeem-points">
+    <!--* modal-redeem-item open -->
+    <div class="modal-overlay hidden" id="modal-redeem-item">
         <div class="modal-content bg-white p-5">
             <div class="flex items-center justify-between mb-2">
                 <h3 class="font-black text-xl text-gray-800">🎁 แลกแต้ม</h3>
-                <button onclick="closeModal('modal-redeem-points')" class="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 font-black">✕</button>
+                <button onclick="closeModal('modal-redeem-item')" class="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 font-black">✕</button>
             </div>
-            <p id="redeem-member-balance" class="text-[11px] font-black text-emerald-700 mb-3">แต้มคงเหลือ: 0</p>
-            <div id="redeem-menu-list" class="space-y-2 max-h-72 overflow-y-auto"></div>
+            <p id="redeem-item-title" class="text-sm font-black text-gray-700 mb-1">เมนู: -</p>
+            <p id="redeem-item-need" class="text-[11px] font-black text-emerald-700 mb-3">ต้องใช้: 0 แต้ม</p>
+            <label for="redeem-member-keyword" class="text-[10px] text-gray-500 font-black uppercase tracking-wider block mb-2">กรอกเบอร์โทร หรือชื่อสมาชิก</label>
+            <div class="flex gap-2 mb-2">
+                <input id="redeem-member-keyword" type="text" placeholder="เบอร์โทร หรือ ชื่อสมาชิก" class="flex-1 border-2 p-3 rounded-xl text-sm font-bold bg-white outline-none focus:border-primary" oninput="lookupRedeemMember(this.value)">
+                <button onclick="applyRedeemMemberLookup()" class="px-3 rounded-xl bg-slate-800 text-white text-[11px] font-black active:scale-95">ค้นหา</button>
+            </div>
+            <p id="redeem-member-hint" class="text-[10px] text-gray-400 font-bold mt-2">ยังไม่ได้เลือกสมาชิก</p>
             <div class="mt-4 grid grid-cols-2 gap-3">
-                <button onclick="closeModal('modal-redeem-points')" class="bg-gray-100 text-gray-600 py-3 rounded-xl font-black text-sm active:scale-95">ยกเลิก</button>
-                <button onclick="applyRedeemPointsSelection()" class="bg-emerald-500 text-white py-3 rounded-xl font-black text-sm active:scale-95">เพิ่มเมนูแลกแต้ม</button>
+                <button onclick="closeModal('modal-redeem-item')" class="bg-gray-100 text-gray-600 py-3 rounded-xl font-black text-sm active:scale-95">ยกเลิก</button>
+                <button onclick="confirmRedeemItemByPoints()" class="bg-emerald-500 text-white py-3 rounded-xl font-black text-sm active:scale-95">ยืนยันแลกแต้ม</button>
             </div>
         </div>
     </div>
-    <!--** modal-redeem-points close -->
+    <!--** modal-redeem-item close -->
 
     <!--* modal-sales-insight open -->
     <div class="modal-overlay hidden" id="modal-sales-insight">
