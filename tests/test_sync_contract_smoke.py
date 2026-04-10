@@ -34,9 +34,9 @@ class SyncContractSmokeTest(unittest.TestCase):
 
     def test_image_optimization_is_enabled(self):
         self.assertIn('async function optimizeImageFile(file, options = {})', self.core)
-        self.assertIn("temp: { maxWidth: 960, maxBytes: 320 * 1024 }", self.core)
-        self.assertIn("logo: { maxWidth: 760, maxBytes: 260 * 1024 }", self.core)
-        self.assertIn("qr: { maxWidth: 1100, maxBytes: 420 * 1024, outputType: 'image/png' }", self.core)
+        self.assertIn("temp: { maxWidth: 640, maxBytes: 180 * 1024, cropSquare: true }", self.core)
+        self.assertIn("logo: { maxWidth: 520, maxBytes: 120 * 1024, cropSquare: true }", self.core)
+        self.assertIn("qr: { maxWidth: 720, maxBytes: 220 * 1024, outputType: 'image/png' }", self.core)
 
 
 if __name__ == '__main__':
