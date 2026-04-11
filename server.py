@@ -74,10 +74,12 @@ LOCAL_DB_EVENT_BUS = LocalDbEventBus()
 
 def _atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Path
     with NamedTemporaryFile("w", encoding=encoding, dir=path.parent, delete=False) as tmp:
         tmp.write(content)
         tmp.flush()
-        Path(tmp.name).replace(path)
+        tmp_path = Path(tmp.name)
+    tmp_path.replace(path)
 
 
 class FakduHandler(SimpleHTTPRequestHandler):
