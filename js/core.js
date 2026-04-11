@@ -13,7 +13,6 @@
   const LS_STAFF_MODE = 'FAKDU_STAFF_MODE';
   const LS_PENDING_PAIR_REQUEST_ID = 'FAKDU_PENDING_PAIR_REQUEST_ID';
   const LS_MENU_IMAGE_CACHE_PREFIX = 'FAKDU_MENU_IMAGE_CACHE_';
-  const LS_PROMPTPAY_DYNAMIC = 'promptpay_dynamic';
   const LS_LAST_DB_MAINTENANCE_AT = 'FAKDU_LAST_DB_MAINTENANCE_AT';
   const MEMBER_BAHT_PER_POINT = 10;
   const HEARTBEAT_INTERVAL_MS = 5000;
@@ -44,6 +43,7 @@
     bank: '',
     ppay: '',
     qrOffline: '',
+    promptPayDynamicEnabled: false,
     adminPin: '1234',
     licenseToken: '',
     licenseActive: false,
@@ -283,10 +283,11 @@
     return value === 'transfer' || value === 'qr' || value === 'promptpay';
   }
   function isPromptPayDynamicEnabled() {
-    return localStorage.getItem(LS_PROMPTPAY_DYNAMIC) === 'true';
+    return Boolean(state.db.promptPayDynamicEnabled);
   }
-  function setPromptPayDynamicEnabled(enabled) {
-    localStorage.setItem(LS_PROMPTPAY_DYNAMIC, enabled ? 'true' : 'false');
+  function setPromptPayDynamicEnabled(enabled, options = {}) {
+    state.db.promptPayDynamicEnabled = Boolean(enabled);
+    if (options.persist !== false) saveDb({ render: false, sync: true });
   }
   function escapeHtml(str = '') {
     return String(str)
@@ -483,6 +484,7 @@
         bank: state.db.bank || '',
         ppay: state.db.ppay || '',
         qrOffline: state.db.qrOffline || '',
+        promptPayDynamicEnabled: Boolean(state.db.promptPayDynamicEnabled),
         soundEnabled: Boolean(state.db.soundEnabled)
       },
       syncSession: {
@@ -658,6 +660,11 @@
 
   function normalizeDb(raw) {
     const merged = { ...clone(DEFAULT_DB), ...(raw || {}) };
+    if (raw?.promptPayDynamicEnabled === undefined) {
+      merged.promptPayDynamicEnabled = localStorage.getItem('promptpay_dynamic') === 'true';
+    } else {
+      merged.promptPayDynamicEnabled = Boolean(raw.promptPayDynamicEnabled);
+    }
     merged.recovery = { ...clone(DEFAULT_DB.recovery), ...(raw?.recovery || {}) };
     merged.sync = {
       ...clone(DEFAULT_DB.sync),
@@ -1806,7 +1813,12 @@
     if (!offlineImg || !genArea || !status) return;
     genArea.innerHTML = '';
     status.textContent = '';
+    const bankLabelEl = qs('qr-bank-label');
     const isDynamicEnabled = isPromptPayDynamicEnabled();
+    const isOnline = navigator.onLine;
+    const shouldUseDynamicRealtime = isDynamicEnabled && isOnline;
+    const bankLabel = String(state.db.bank || '').trim() || 'พร้อมเพย์';
+    if (bankLabelEl) bankLabelEl.textContent = `ธนาคาร: ${bankLabel}`;
     offlineImg.classList.add('hidden');
     genArea.classList.add('hidden');
 
@@ -1817,44 +1829,40 @@
       shopName: state.db.shopName
     });
 
-    if (!isDynamicEnabled) {
+    if (shouldUseDynamicRealtime) {
+      genArea.classList.remove('hidden');
+      if (qrCanvas && payload) {
+        genArea.appendChild(qrCanvas);
+        status.textContent = `${bankLabel} • ${state.db.ppay} (Realtime Dynamic • Online)`;
+        return;
+      }
       if (state.db.qrOffline) {
         offlineImg.src = state.db.qrOffline;
         offlineImg.classList.remove('hidden');
-        status.textContent = state.db.bank && state.db.ppay ? `${state.db.bank} • ${state.db.ppay} (Static)` : 'ใช้ QR ที่ร้านอัปไว้ (Static)';
+        status.textContent = `${bankLabel} • ${state.db.ppay || '-'} (Fallback Static)`;
         return;
       }
-      if (qrCanvas && payload) {
-        genArea.classList.remove('hidden');
-        genArea.appendChild(qrCanvas);
-        status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Auto Dynamic)`;
-        return;
-      }
-      genArea.classList.remove('hidden');
-      genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่มี QR แบบภาพนิ่ง และสร้าง Dynamic ไม่ได้<br>กรุณาใส่พร้อมเพย์หรืออัปโหลด QR</div>';
-      status.textContent = 'โหมด Static: ยังไม่มี QR พร้อมใช้งาน';
-      return;
-    }
-
-    genArea.classList.remove('hidden');
-    if (qrCanvas && payload) {
-      genArea.appendChild(qrCanvas);
-      status.textContent = `${state.db.bank || 'พร้อมเพย์'} • ${state.db.ppay} (Dynamic)`;
+      genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">โหมดออนไลน์แต่สร้าง Dynamic ไม่ได้<br>กรุณาตรวจสอบพร้อมเพย์หรืออัปโหลด QR ภาพนิ่ง</div>';
+      status.textContent = 'Online อยู่ แต่ไม่มี QR ใช้งาน';
       return;
     }
 
     if (state.db.qrOffline) {
       offlineImg.src = state.db.qrOffline;
       offlineImg.classList.remove('hidden');
-      status.textContent = state.db.bank && state.db.ppay
-        ? `${state.db.bank} • ${state.db.ppay} (Fallback Static)`
-        : 'Dynamic ไม่พร้อม ใช้ QR ภาพนิ่งแทน';
+      status.textContent = `${bankLabel} • ${state.db.ppay || '-'} (Realtime Static • Offline)`;
       return;
     }
-    genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่สามารถสร้าง QR Dynamic ได้<br>กรุณาอัปโหลด QR Static ในหน้าระบบเพื่อใช้งานผ่าน LAN</div>';
-    status.textContent = typeof QRCode !== 'function'
-      ? 'ไม่พบตัวสร้าง QR ในเว็บ (QRCode lib) กรุณาอัปโหลด QR Static'
-      : 'ไม่มี QR พร้อมใช้งาน';
+
+    genArea.classList.remove('hidden');
+    if (qrCanvas && payload) {
+      genArea.appendChild(qrCanvas);
+      status.textContent = `${bankLabel} • ${state.db.ppay} (Offline but Dynamic Fallback)`;
+      return;
+    }
+
+    genArea.innerHTML = '<div class="text-xs text-gray-400 font-bold text-center">ยังไม่มี QR ภาพนิ่งสำหรับโหมดออฟไลน์<br>กรุณาอัปโหลด QR รูปในหน้าระบบ</div>';
+    status.textContent = 'Offline อยู่ และไม่มี QR ภาพนิ่ง';
   }
 
   function deleteOrderItem(index) {
@@ -2577,7 +2585,7 @@
     state.db.bgColor = qs('sys-bg')?.value || '#f8fafc';
     state.db.bank = qs('sys-bank')?.value?.trim() || '';
     state.db.ppay = qs('sys-ppay')?.value?.trim() || '';
-    setPromptPayDynamicEnabled(Boolean(qs('sys-promptpay-dynamic')?.checked));
+    setPromptPayDynamicEnabled(Boolean(qs('sys-promptpay-dynamic')?.checked), { persist: false });
     if (!state.db.shopId) state.db.shopId = makeShopId();
     logOperation('SAVE_SYSTEM_SETTINGS', { shopName: state.db.shopName });
     applyTheme();
@@ -3092,6 +3100,9 @@
       state.db.bank = payload.settings.bank || state.db.bank;
       state.db.ppay = payload.settings.ppay || state.db.ppay;
       state.db.qrOffline = payload.settings.qrOffline || state.db.qrOffline;
+      if (payload.settings.promptPayDynamicEnabled !== undefined) {
+        state.db.promptPayDynamicEnabled = Boolean(payload.settings.promptPayDynamicEnabled);
+      }
       state.db.soundEnabled = Boolean(payload.settings.soundEnabled);
     }
     saveDb({ render: true, sync: false });
@@ -4798,11 +4809,20 @@
   //* shield close
 
   //* events open
+  function refreshCheckoutQrIfOpen() {
+    const checkoutModal = qs('modal-checkout');
+    if (checkoutModal && !checkoutModal.classList.contains('hidden')) updateQrDisplay();
+  }
+
   window.addEventListener('online', () => {
     updateMasterConnectionUi();
     if (IS_CLIENT_NODE) flushClientOpQueue();
+    refreshCheckoutQrIfOpen();
   });
-  window.addEventListener('offline', updateMasterConnectionUi);
+  window.addEventListener('offline', () => {
+    updateMasterConnectionUi();
+    refreshCheckoutQrIfOpen();
+  });
   window.addEventListener('storage', (event) => {
     if (!IS_CLIENT_NODE || !event.key || !event.newValue) return;
     if (!event.key.startsWith(LS_SNAPSHOT_PREFIX)) return;
@@ -4818,7 +4838,7 @@
         if (state.activeTab !== 'system') return;
         const target = event.target;
         if (!(target instanceof HTMLInputElement)) return;
-        setPromptPayDynamicEnabled(target.checked);
+        setPromptPayDynamicEnabled(target.checked, { persist: true });
         if (qs('modal-checkout') && !qs('modal-checkout').classList.contains('hidden')) updateQrDisplay();
       });
     }
@@ -4826,8 +4846,7 @@
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (!target.closest('#shop-queue button') && !target.closest('#checkout-payment-buttons button')) return;
-      const checkoutModal = qs('modal-checkout');
-      if (checkoutModal && !checkoutModal.classList.contains('hidden')) updateQrDisplay();
+      refreshCheckoutQrIfOpen();
     });
     init();
   });
