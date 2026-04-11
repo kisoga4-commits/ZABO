@@ -500,7 +500,7 @@
     return `MSG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
   }
   function resolveFirebaseSyncApi() {
-    // LAN-first build: disabled cloud adapter path to reduce runtime overhead.
+    // LAN-only mode: cloud sync adapter intentionally disabled.
     return null;
   }
   function getClientStatus(client) {
