@@ -27,7 +27,7 @@ log = logging.getLogger("werkzeug")
 log.setLevel(logging.ERROR)
 
 app = Flask(__name__)
-ASSET_VERSION = "20260402-promptpay-fix-v6"
+ASSET_VERSION = "20260412-staff-owner-only-v1"
 
 
 @app.after_request
@@ -298,7 +298,9 @@ def _create_order(payload: dict) -> dict:
     if not cart:
         raise ValueError("cart is empty")
 
-    source = payload.get("source", "customer")
+    source = str(payload.get("source", "staff")).strip().lower() or "staff"
+    if source == "customer":
+        raise PermissionError("customer_order_disabled")
     db = load_db()
     if target == "table":
         if not isinstance(target_id, int):
@@ -306,13 +308,10 @@ def _create_order(payload: dict) -> dict:
         table = next((item for item in db.get("tables", []) if item.get("id") == target_id), None)
         if table is None:
             raise ValueError("table not found")
-        if source == "customer":
-            raw_token = str(payload.get("table_token") or "").strip()
-            parsed_id, parsed_suffix = parse_table_token(raw_token)
-            if parsed_id != target_id or str(table.get("suffix", "")) != parsed_suffix:
-                raise PermissionError("forbidden_invalid_table_token")
+        if source not in {"owner", "staff"}:
+            source = "staff"
     order_id = f"ORD-{int(datetime.now().timestamp())}-{len(db['orders']) + 1}"
-    initial_status = "request_pending" if source == "customer" else "accepted"
+    initial_status = "accepted"
     normalized_cart = _normalize_cart_items(cart, db.get("menu", []))
     if not normalized_cart:
         raise ValueError("cart has no valid items")
@@ -325,27 +324,6 @@ def _create_order(payload: dict) -> dict:
         "items": normalized_cart,
         "source": source,
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
-    if source == "customer":
-        now_ts = datetime.now()
-        for order in reversed(db["orders"]):
-            if (
-                order.get("target") == target
-                and order.get("target_id") == target_id
-                and order.get("source") == "customer"
-                and order.get("request_fingerprint") == request_fingerprint
-                and order.get("status") in {"request_pending", "accepted"}
-            ):
-                existing_client_id = str(order.get("client_order_id") or "").strip()
-                incoming_client_id = str(payload.get("client_order_id") or "").strip()
-                created_at = _safe_parse_iso_datetime(order.get("created_at"))
-                is_recent_retry = False
-                if created_at is not None:
-                    is_recent_retry = (now_ts - created_at).total_seconds() <= 12
-                if incoming_client_id and existing_client_id and incoming_client_id == existing_client_id:
-                    return {"status": "success", "order": order, "version": db["meta"]["version"], "deduplicated": True}
-                if is_recent_retry and not incoming_client_id and not existing_client_id:
-                    return {"status": "success", "order": order, "version": db["meta"]["version"], "deduplicated": True}
-
     new_order = {
         "id": order_id,
         "target": target,
@@ -365,11 +343,8 @@ def _create_order(payload: dict) -> dict:
     if target == "table" and isinstance(target_id, int):
         for table in db["tables"]:
             if table["id"] == target_id:
-                if source == "customer":
-                    table["status"] = "pending_order"
-                else:
-                    table["status"] = "accepted_order"
-                    table["items"].extend(normalized_cart)
+                table["status"] = "accepted_order"
+                table["items"].extend(normalized_cart)
                 break
 
     db = save_db(db)
@@ -793,22 +768,8 @@ def api_table_reject():
 
 @app.route("/api/table/call-staff", methods=["POST"])
 @require_license
-@require_roles("customer")
 def api_table_call_staff():
-    payload = read_json()
-    table_id = payload.get("table_id")
-    if not isinstance(table_id, int):
-        return jsonify({"error": "invalid table_id"}), 400
-
-    db = load_db()
-    for table in db["tables"]:
-        if table["id"] == table_id:
-            table["call_staff_status"] = "requested"
-            table["call_staff_requested_at"] = local_now()
-            table["call_staff_ack_at"] = ""
-            db = save_db(db)
-            return jsonify({"status": "success", "version": db["meta"]["version"]})
-    return jsonify({"error": "table not found"}), 404
+    return jsonify({"error": "customer_requests_disabled"}), 410
 
 
 @app.route("/api/table/call-staff/ack", methods=["POST"])
@@ -834,29 +795,8 @@ def api_table_call_staff_ack():
 
 @app.route("/api/table/checkout-request", methods=["POST"])
 @require_license
-@require_roles("customer")
 def api_table_checkout_request():
-    payload = read_json()
-    table_id = payload.get("table_id")
-    if not isinstance(table_id, int):
-        return jsonify({"error": "invalid table_id"}), 400
-
-    db = load_db()
-    for table in db["tables"]:
-        if table["id"] == table_id:
-            accepted_exists = any(
-                order.get("target") == "table"
-                and order.get("target_id") == table_id
-                and order.get("status") in {"accepted", "completed"}
-                for order in db["orders"]
-            )
-            if accepted_exists:
-                table["status"] = "checkout_requested"
-            else:
-                _refresh_table_state(db, table_id)
-            db = save_db(db)
-            return jsonify({"status": "success", "version": db["meta"]["version"]})
-    return jsonify({"error": "table not found"}), 404
+    return jsonify({"error": "customer_requests_disabled"}), 410
 
 
 @app.route("/api/settings", methods=["POST"])

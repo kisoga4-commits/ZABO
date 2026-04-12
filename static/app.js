@@ -71,19 +71,6 @@ function resolveRuntimeHost() {
   return networkBaseUrl || window.location.origin;
 }
 
-function buildTableToken(table) {
-  const tableId = Number(table?.id || 0);
-  const suffix = String(table?.suffix || '');
-  if (!tableId || suffix.length !== 4) return '';
-  return `${tableId}${suffix}`;
-}
-
-function customerScanUrl(tableId) {
-  const table = (db?.tables || []).find((item) => Number(item.id) === Number(tableId));
-  const token = buildTableToken(table);
-  if (token) return `${resolveRuntimeHost()}/customer?t=${encodeURIComponent(token)}`;
-  return `${resolveRuntimeHost()}/customer?table=${tableId}`;
-}
 function buildQrImageUrl(text) { return window.PromptPayQR?.buildQrImageUrl(text) || ''; }
 function playAlert(id) {
   if (!uiSoundEnabled) return;
@@ -1343,7 +1330,6 @@ function renderSystem() {
   renderPrinterDriverOptions(s.printerDriver || '');
   renderThemePresets(s.themePreset || '');
   updateReceiptPreview();
-  renderTableQRList();
   renderPaymentReadiness();
   renderBackupList();
 }
@@ -1549,38 +1535,6 @@ function openQRModal(title, url, imageUrl) {
     printWindow.print();
   };
   qs('qr-modal').classList.remove('hidden');
-}
-
-function renderTableQRList() {
-  const select = qs('table-qr-select');
-  if (!select) return;
-  select.innerHTML = '<option value="">-- เลือกโต๊ะ --</option>';
-  db.tables.forEach((table) => {
-    const option = document.createElement('option');
-    option.value = String(table.id);
-    option.textContent = `Table ${table.id}`;
-    select.appendChild(option);
-  });
-  renderSelectedTableQR(select.value);
-}
-
-function renderSelectedTableQR(tableId) {
-  const wrap = qs('table-qr-preview');
-  const image = qs('table-qr-image');
-  const link = qs('table-qr-link');
-  if (!wrap || !image || !link) return;
-  if (!tableId) {
-    wrap.classList.add('hidden');
-    image.src = '';
-    link.textContent = '';
-    link.href = '';
-    return;
-  }
-  const url = customerScanUrl(Number(tableId));
-  image.src = buildQrImageUrl(url);
-  link.textContent = url;
-  link.href = url;
-  wrap.classList.remove('hidden');
 }
 
 async function loadData() {
@@ -1933,9 +1887,6 @@ function bind() {
   qs('open-staff-qr-modal')?.addEventListener('click', () => {
     const url = `${resolveRuntimeHost()}/scan/staff`;
     openQRModal('Staff-Access', url, buildQrImageUrl(url));
-  });
-  qs('table-qr-select')?.addEventListener('change', (event) => {
-    renderSelectedTableQR(event.target.value);
   });
   qs('recheck-system')?.addEventListener('click', checkSystemHealth);
   qs('create-backup-btn')?.addEventListener('click', async () => {

@@ -811,6 +811,10 @@ function bind() {
     refreshSubmitState();
     return;
   }
+  document.getElementById('submit-order').disabled = true;
+  const callStaffBtn = document.getElementById('call-staff-mini-btn');
+  if (callStaffBtn) callStaffBtn.disabled = true;
+  document.getElementById('message').textContent = 'ปิดการสั่งจากฝั่งลูกค้าแล้ว กรุณาให้พนักงานรับออเดอร์แทน';
   if ('serviceWorker' in navigator) {
     const assetVersion = document.body.dataset.assetVersion || 'dev';
     navigator.serviceWorker

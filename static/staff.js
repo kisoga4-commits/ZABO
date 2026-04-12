@@ -187,7 +187,7 @@ function tableCard(table, orders = [], actions = [], options = {}) {
   if (table.status === 'pending_order') {
     const notify = document.createElement('div');
     notify.className = 'dot-notify';
-    notify.textContent = '🔔 ลูกค้าสั่งจาก QR';
+    notify.textContent = '🔔 มีออเดอร์รอดำเนินการ';
     card.appendChild(notify);
   }
   if (table.has_additional_order) {
