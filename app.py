@@ -243,7 +243,11 @@ def customer_display_page():
 
 @app.route("/scan/staff")
 def staff_scan_page():
-    return redirect(url_for("staff_page"))
+    return render_template(
+        "staff.html",
+        asset_version=ASSET_VERSION,
+        auto_staff=True,
+    )
 
 
 @app.route("/authorize-staff")
@@ -299,8 +303,6 @@ def _create_order(payload: dict) -> dict:
         raise ValueError("cart is empty")
 
     source = str(payload.get("source", "staff")).strip().lower() or "staff"
-    if source == "customer":
-        raise PermissionError("customer_order_disabled")
     db = load_db()
     if target == "table":
         if not isinstance(target_id, int):
@@ -308,10 +310,10 @@ def _create_order(payload: dict) -> dict:
         table = next((item for item in db.get("tables", []) if item.get("id") == target_id), None)
         if table is None:
             raise ValueError("table not found")
-        if source not in {"owner", "staff"}:
+        if source not in {"owner", "staff", "customer"}:
             source = "staff"
     order_id = f"ORD-{int(datetime.now().timestamp())}-{len(db['orders']) + 1}"
-    initial_status = "accepted"
+    initial_status = "request_pending" if source == "customer" else "accepted"
     normalized_cart = _normalize_cart_items(cart, db.get("menu", []))
     if not normalized_cart:
         raise ValueError("cart has no valid items")
@@ -341,11 +343,7 @@ def _create_order(payload: dict) -> dict:
     db["orders"].append(new_order)
 
     if target == "table" and isinstance(target_id, int):
-        for table in db["tables"]:
-            if table["id"] == target_id:
-                table["status"] = "accepted_order"
-                table["items"].extend(normalized_cart)
-                break
+        _refresh_table_state(db, target_id)
 
     db = save_db(db)
     return {"status": "success", "order": new_order, "version": db["meta"]["version"]}
