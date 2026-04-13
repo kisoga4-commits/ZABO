@@ -55,6 +55,11 @@ if (!isAdminLoggedIn && localStorage.getItem(ADMIN_SESSION_KEY) === '1') {
 }
 const tableParam = Number(new URLSearchParams(window.location.search).get('table') || 0);
 const scannerAllowedScreens = new Set(['customer', 'cashier']);
+if (scannerMode) {
+  isAdminLoggedIn = false;
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
+  localStorage.removeItem(ADMIN_SESSION_KEY);
+}
 
 async function loadNetworkBaseUrl() {
   const network = await api('/api/system/network');
@@ -1885,7 +1890,7 @@ function bind() {
   qs('table-zoom-in')?.addEventListener('click', () => { tableZoom = Math.min(140, tableZoom + 10); applyTableZoom(); });
   qs('table-zoom-out')?.addEventListener('click', () => { tableZoom = Math.max(85, tableZoom - 10); applyTableZoom(); });
   qs('open-staff-qr-modal')?.addEventListener('click', () => {
-    const url = `${resolveRuntimeHost()}/scan/staff`;
+    const url = `${resolveRuntimeHost()}/?mode=scanner`;
     openQRModal('Staff-Access', url, buildQrImageUrl(url));
   });
   qs('recheck-system')?.addEventListener('click', checkSystemHealth);
