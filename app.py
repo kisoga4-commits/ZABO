@@ -27,7 +27,7 @@ log = logging.getLogger("werkzeug")
 log.setLevel(logging.ERROR)
 
 app = Flask(__name__)
-ASSET_VERSION = "20260412-staff-owner-only-v1"
+ASSET_VERSION = "20260413-scan-staff-scanner-mode-v1"
 
 
 @app.after_request
@@ -243,11 +243,7 @@ def customer_display_page():
 
 @app.route("/scan/staff")
 def staff_scan_page():
-    return render_template(
-        "staff.html",
-        asset_version=ASSET_VERSION,
-        auto_staff=True,
-    )
+    return redirect(url_for("index", mode="scanner"))
 
 
 @app.route("/authorize-staff")
