@@ -35,7 +35,7 @@ h1,h2,h3,h4,p{margin:0}
 .hero-logo{width:88px;height:88px;border-radius:24px;box-shadow:0 14px 28px rgba(124,58,237,.22);font-size:1.2rem}
 .logo-slot img{width:100%;height:100%;object-fit:cover}
 .muted-light{color:var(--muted);font-size:.85rem}
-.header-icons{display:flex;gap:10px}
+.header-icons{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .icon-btn{width:44px;height:44px;border-radius:999px;border:1px solid #ddd6fe;background:#fff;cursor:pointer;font-size:1.08rem;box-shadow:0 6px 14px rgba(124,58,237,.1);transition:.2s}
 .icon-btn:hover{transform:translateY(-1px)}
 .network-dot{width:12px;height:12px;border-radius:999px;display:inline-block;position:absolute;top:0;left:0;z-index:2}
@@ -892,6 +892,12 @@ main{display:grid;gap:10px}
 .menu-category-admin-tabs{display:grid;gap:8px}
 .menu-category-tab-card{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .menu-category-pill{font-weight:700}
+.menu-category-manage{margin-top:8px;display:grid;gap:6px}
+.sales-pill{font-weight:700;background:#dcfce7;border:1px solid #86efac;color:#166534}
+.sales-today-summary{margin-top:10px;display:grid;gap:8px}
+.sales-today-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;color:#334155}
+.sales-today-grid strong{color:#0f172a}
+.staff-sales-pill{display:inline-block;background:#dcfce7;border:1px solid #86efac;color:#166534;border-radius:999px;padding:3px 8px}
 
 /* targeted backstore fixes */
 .backstore-menu-tabs{margin-top:10px}
@@ -921,10 +927,8 @@ main{display:grid;gap:10px}
   border-color:#c7d2fe;
   box-shadow:0 8px 18px rgba(59,130,246,.18);
 }
-.header-icons .icon-btn:nth-child(1){background:linear-gradient(135deg,#fef2f2,#fee2e2,#fce7f3)}
-.header-icons .icon-btn:nth-child(2){background:linear-gradient(135deg,#ecfccb,#dcfce7,#ccfbf1)}
-.header-icons .icon-btn:nth-child(3){background:linear-gradient(135deg,#dbeafe,#e0e7ff,#ede9fe)}
-.header-icons .icon-btn:nth-child(4){background:linear-gradient(135deg,#ffedd5,#fde68a,#fef9c3)}
+#open-customer-display-from-header{background:linear-gradient(135deg,#dbeafe,#e0e7ff,#ede9fe)}
+#open-staff-qr-modal{background:linear-gradient(135deg,#ffedd5,#fde68a,#fef9c3)}
 .main-tab:nth-child(1) svg{stroke:#0ea5e9}
 .main-tab:nth-child(2) svg{stroke:#f97316}
 .main-tab:nth-child(3) svg{stroke:#22c55e}
