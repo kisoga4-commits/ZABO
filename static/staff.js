@@ -83,6 +83,22 @@ function applyBranding(settings = {}) {
   }
 }
 
+function isSameDate(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function renderStaffTodaySales(sales = []) {
+  const node = document.getElementById('staff-today-sales');
+  if (!node) return;
+  const today = new Date();
+  const total = (sales || []).reduce((sum, sale) => {
+    const stamp = new Date(sale.paid_at || sale.created_at || sale.timestamp || Date.now());
+    if (Number.isNaN(stamp.getTime()) || !isSameDate(stamp, today)) return sum;
+    return sum + Number(sale.total || 0);
+  }, 0);
+  node.textContent = `💰 วันนี้ขายแล้ว ${Number(total).toLocaleString('th-TH')} บาท`;
+}
+
 function cartIdentity(item) {
   const addonKey = (item.addons || []).map((addon) => addon.name || addon).join('|');
   return `${item.id || item.name}__${addonKey}__${item.note || ''}`;
@@ -385,6 +401,7 @@ async function loadLive() {
     api('/api/data'),
   ]);
   applyBranding(rawData?.settings || {});
+  renderStaffTodaySales(rawData?.sales || []);
   applySnapshot(data.snapshot || {});
 }
 

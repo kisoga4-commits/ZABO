@@ -26,6 +26,7 @@
         </div>
       </div>
       <div class="header-icons">
+        <div id="host-today-sales" class="pill sales-pill">💰 วันนี้ขายแล้ว 0 บาท</div>
         <button id="admin-login-btn" class="btn-soft" type="button" aria-label="Admin login">🔐 Admin Login</button>
         <button id="admin-logout-btn" class="btn-soft hidden" type="button" aria-label="Admin logout">🚪 Admin Logout</button>
         <button id="open-customer-display-from-header" class="icon-btn" type="button" aria-label="Open customer display">🖥️</button>
@@ -93,6 +94,10 @@
             <input id="menu-category-name" type="text" placeholder="เพิ่มหมวดเมนูใหม่" />
             <button id="add-menu-category" class="btn-soft" type="button">+ เพิ่มหมวด</button>
           </div>
+          <div class="menu-category-manage">
+            <small class="muted">แก้ไข/ลบหมวดเมนู</small>
+            <div id="menu-category-admin" class="menu-category-admin-tabs"></div>
+          </div>
           <div id="menu-category-filter-tabs" class="menu-category-tabs backstore-menu-tabs"></div>
           <div id="menu-list"></div>
         </div>
@@ -115,6 +120,7 @@
             </div>
             <div id="sales-comparison" class="sales-comparison-card"></div>
             <div id="sales-overview" class="sales-overview-grid premium-kpi"></div>
+            <div id="sales-today-summary" class="list-card sales-today-summary"></div>
             <div id="sales-chart" class="sales-chart"></div>
           </div>
           <section class="sales-panel">

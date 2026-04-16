@@ -40,6 +40,7 @@ const statusMap = {
 const qs = (id) => document.getElementById(id);
 const money = (n) => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const unitLabel = () => (db?.settings?.serviceMode === 'queue' ? 'คิว' : 'โต๊ะ');
+const ALL_CATEGORY = 'ทั้งหมด';
 let networkBaseUrl = document.body.dataset.localBaseUrl || '';
 let liveEventSource = null;
 const scannerMode = document.body.dataset.scannerMode === '1';
@@ -397,7 +398,7 @@ function renderOrderMenuChoices() {
   const renderToken = ++orderMenuRenderToken;
   const grid = qs('order-menu-grid');
   grid.innerHTML = '';
-  const filteredMenu = (db.menu || []).filter((item) => activeMenuCategory === 'ทั้งหมด' || (item.category || 'ทั่วไป') === activeMenuCategory);
+  const filteredMenu = (db.menu || []).filter((item) => activeMenuCategory === ALL_CATEGORY || normalizeCategoryName(item.category) === activeMenuCategory);
   const batchSize = 60;
   let cursor = 0;
   const paintBatch = () => {
@@ -442,7 +443,7 @@ function renderOrderMenuChoices() {
 }
 
 function getMenuCategories() {
-  const categories = new Set(['ทั้งหมด']);
+  const categories = new Set([ALL_CATEGORY]);
   getMenuCategoryChoices().forEach((name) => categories.add(name));
   return [...categories];
 }
@@ -450,6 +451,31 @@ function getMenuCategories() {
 function normalizeCategoryName(value, fallback = 'ทั่วไป') {
   const cleaned = String(value || '').trim();
   return cleaned || fallback;
+}
+
+function isSameDate(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function todaySalesSummary(sales = []) {
+  const today = new Date();
+  const list = sales.filter((sale) => {
+    const stamp = salesDate(sale);
+    return stamp instanceof Date && !Number.isNaN(stamp.getTime()) && isSameDate(stamp, today);
+  });
+  return {
+    sales: list,
+    total: list.reduce((sum, sale) => sum + Number(sale.total || 0), 0),
+    cash: list.filter((sale) => sale.payment_method === 'cash').reduce((sum, sale) => sum + Number(sale.total || 0), 0),
+    qr: list.filter((sale) => sale.payment_method === 'qr').reduce((sum, sale) => sum + Number(sale.total || 0), 0),
+  };
+}
+
+function renderTodaySalesBadge() {
+  const node = qs('host-today-sales');
+  if (!node) return;
+  const summary = todaySalesSummary(db?.sales || []);
+  node.textContent = `💰 วันนี้ขายแล้ว ${money(summary.total)} บาท`;
 }
 
 function readFileAsDataUrl(file) {
@@ -505,11 +531,11 @@ function getMenuCategoryChoices() {
   const customCategories = Array.isArray(db?.settings?.menuCategories) ? db.settings.menuCategories : [];
   customCategories.forEach((name) => {
     const clean = normalizeCategoryName(name, '');
-    if (clean) categories.add(clean);
+    if (clean && clean !== ALL_CATEGORY) categories.add(clean);
   });
   (db?.menu || []).forEach((item) => {
     const name = normalizeCategoryName(item.category, '');
-    if (name) categories.add(name);
+    if (name && name !== ALL_CATEGORY) categories.add(name);
   });
   return [...categories];
 }
@@ -566,6 +592,10 @@ async function renameMenuCategory(sourceCategory) {
   const from = normalizeCategoryName(sourceCategory);
   const next = normalizeCategoryName(window.prompt(`เปลี่ยนชื่อหมวด "${from}" เป็น`, from), '');
   if (!next || next === from) return;
+  if (next === ALL_CATEGORY) {
+    window.alert('ชื่อหมวด "ทั้งหมด" เป็นชื่อระบบ ไม่สามารถใช้ได้');
+    return;
+  }
   const exists = getMenuCategoryChoices().some((name) => name === next);
   if (exists) {
     window.alert('มีหมวดนี้อยู่แล้ว');
@@ -593,6 +623,10 @@ async function addMenuCategory() {
   if (!input) return;
   const name = normalizeCategoryName(input.value, '');
   if (!name) return;
+  if (name === ALL_CATEGORY) {
+    window.alert('ชื่อหมวด "ทั้งหมด" เป็นชื่อระบบ ไม่สามารถเพิ่มได้');
+    return;
+  }
   if (getMenuCategoryChoices().includes(name)) {
     window.alert('หมวดนี้มีอยู่แล้ว');
     return;
@@ -606,7 +640,7 @@ function renderOrderCategoryTabs() {
   const wrap = qs('order-menu-category-tabs');
   if (!wrap) return;
   const categories = getMenuCategories();
-  if (!categories.includes(activeMenuCategory)) activeMenuCategory = 'ทั้งหมด';
+  if (!categories.includes(activeMenuCategory)) activeMenuCategory = ALL_CATEGORY;
   wrap.innerHTML = '';
   categories.forEach((cat) => {
     const btn = document.createElement('button');
@@ -1253,6 +1287,8 @@ function openSalesPeriodModal(range, salesInRange) {
 
 function renderSales() {
   const sales = db.sales || [];
+  const todaySummary = todaySalesSummary(sales);
+  renderTodaySalesBadge();
   const range = salesFilterRange || periodRange(salesPeriod, new Date());
   const inCurrent = sales.filter((s) => salesDate(s) >= range.start && salesDate(s) <= range.end);
   const inPrevious = sales.filter((s) => salesDate(s) >= range.previousStart && salesDate(s) <= range.previousEnd);
@@ -1271,6 +1307,16 @@ function renderSales() {
     comparison.innerHTML = `<strong>${range.label}</strong><span>${comparisonText}</span>`;
   }
   qs('sales-overview').innerHTML = `<div class="list-card sales-kpi"><strong>💵 เงินสด</strong><div>฿${money(cash)}</div></div><div class="list-card sales-kpi"><strong>📱 QR</strong><div>฿${money(qr)}</div></div><div class="list-card sales-kpi total"><strong>🧾 ยอดรวม</strong><div>฿${money(currentTotal)}</div></div><div class="list-card sales-kpi"><strong>จำนวนบิล</strong><div>${inCurrent.length}</div></div>`;
+  const todayNode = qs('sales-today-summary');
+  if (todayNode) {
+    todayNode.innerHTML = `<div><strong>💰 วันนี้ (${new Date().toLocaleDateString('th-TH')})</strong></div>
+      <div class="sales-today-grid">
+        <span>ยอดรวม <strong>฿${money(todaySummary.total)}</strong></span>
+        <span>เงินสด <strong>฿${money(todaySummary.cash)}</strong></span>
+        <span>QR/โอน <strong>฿${money(todaySummary.qr)}</strong></span>
+        <span>จำนวนบิล <strong>${todaySummary.sales.length}</strong></span>
+      </div>`;
+  }
   const granularity = salesFilterRange ? chooseChartGranularity(range) : (salesPeriod === 'day' ? 'hour' : salesPeriod === 'week' ? 'day' : 'day');
   const points = buildSalesBuckets(range, inCurrent, granularity);
   renderSalesChart(points);
