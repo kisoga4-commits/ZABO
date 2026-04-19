@@ -894,7 +894,29 @@ main{display:grid;gap:10px}
 .menu-category-pill{font-weight:700}
 .menu-category-manage{margin-top:8px;display:grid;gap:6px}
 .sales-pill{font-weight:700;background:#dcfce7;border:1px solid #86efac;color:#166534}
+.sales-pill-btn{cursor:pointer}
+.sales-pill-btn:hover{filter:brightness(.98)}
 .sales-today-summary{margin-top:10px;display:grid;gap:8px}
+.sales-today-summary-btn{
+  width:100%;
+  text-align:left;
+  border:1px solid #cbd5e1;
+  border-radius:12px;
+  background:#f8fafc;
+  padding:10px;
+  cursor:pointer;
+}
+.sales-clean-layout{
+  border:1px solid #e2e8f0;
+  border-radius:12px;
+  background:#fff;
+  padding:10px;
+}
+.sales-compact-kpi .sales-kpi{
+  box-shadow:none;
+  border:1px solid #e2e8f0;
+  background:#fff;
+}
 .sales-today-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;color:#334155}
 .sales-today-grid strong{color:#0f172a}
 .staff-sales-pill{display:inline-block;background:#dcfce7;border:1px solid #86efac;color:#166534;border-radius:999px;padding:3px 8px}
@@ -959,6 +981,7 @@ main{display:grid;gap:10px}
 .sales-chart-dot{fill:#4f46e5;stroke:#fff;stroke-width:1.5}
 .sales-chart-x,.sales-chart-y{font-size:11px;fill:#64748b}
 .sales-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sales-modal-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:8px}
 .sales-modal-list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px;max-height:220px;overflow:auto}
 .sales-modal-list li{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:7px 8px;border-radius:10px;background:#fff7ed}
 .sales-modal-list li span{font-size:.82rem;color:#7c2d12;text-align:right}

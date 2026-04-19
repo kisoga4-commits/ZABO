@@ -43,24 +43,18 @@ const unitLabel = () => (db?.settings?.serviceMode === 'queue' ? 'คิว' : '
 const ALL_CATEGORY = 'ทั้งหมด';
 let networkBaseUrl = document.body.dataset.localBaseUrl || '';
 let liveEventSource = null;
-const scannerMode = document.body.dataset.scannerMode === '1';
 let activeBackupId = '';
 let checkoutAlertUntil = 0;
+let shouldRefreshWhenVisible = false;
+let loadDataPromise = null;
+let loadDataQueued = false;
+let queuedLoadOptions = {};
+let isPollingLiveUpdate = false;
 const ADMIN_SESSION_KEY = 'admin_logged_in';
 const adminAllowedScreens = new Set(['customer', 'cashier', 'backstore', 'system']);
 const nonAdminAllowedScreens = new Set(['customer', 'cashier']);
-let isAdminLoggedIn = sessionStorage.getItem(ADMIN_SESSION_KEY) === '1';
-if (!isAdminLoggedIn && localStorage.getItem(ADMIN_SESSION_KEY) === '1') {
-  // Migrate legacy persistent login to tab-session login for better safety.
-  localStorage.removeItem(ADMIN_SESSION_KEY);
-}
+let isAdminLoggedIn = localStorage.getItem(ADMIN_SESSION_KEY) === '1' || sessionStorage.getItem(ADMIN_SESSION_KEY) === '1';
 const tableParam = Number(new URLSearchParams(window.location.search).get('table') || 0);
-const scannerAllowedScreens = new Set(['customer', 'cashier']);
-if (scannerMode) {
-  isAdminLoggedIn = false;
-  sessionStorage.removeItem(ADMIN_SESSION_KEY);
-  localStorage.removeItem(ADMIN_SESSION_KEY);
-}
 
 async function loadNetworkBaseUrl() {
   const network = await api('/api/system/network');
@@ -186,6 +180,30 @@ async function checkSystemHealth() {
   setSystemCheckState('online', 'ข้อมูลล่าสุดจากเซิร์ฟเวอร์พร้อมใช้งาน');
 }
 
+function isSystemScreenActive() {
+  return document.body.dataset.activeScreen === 'system' && !qs('system')?.classList.contains('hidden');
+}
+
+function isSalesBestTabVisible() {
+  return !qs('sales-tab-best')?.classList.contains('hidden');
+}
+
+function isBackstoreScreenActive() {
+  return document.body.dataset.activeScreen === 'backstore' && !qs('backstore')?.classList.contains('hidden');
+}
+
+function isBackstoreMenuVisible() {
+  return isBackstoreScreenActive() && !qs('backstore-menu')?.classList.contains('hidden');
+}
+
+function isBackstoreSalesVisible() {
+  return isBackstoreScreenActive() && !qs('backstore-sales')?.classList.contains('hidden');
+}
+
+function isTableOrderModalOpen() {
+  return !qs('table-order-modal')?.classList.contains('hidden');
+}
+
 function showScreen(id) {
   const allowedScreens = isAdminLoggedIn ? adminAllowedScreens : nonAdminAllowedScreens;
   if (!allowedScreens.has(id)) {
@@ -194,12 +212,19 @@ function showScreen(id) {
     }
     return;
   }
-  if (scannerMode && !scannerAllowedScreens.has(id)) return;
   document.querySelectorAll('.screen').forEach((s) => s.classList.add('hidden'));
   qs(id).classList.remove('hidden');
   document.body.dataset.activeScreen = id;
   document.querySelectorAll('[data-screen]').forEach((b) => b.classList.toggle('is-active', b.dataset.screen === id));
   updateCustomerQuickOrderBar();
+  if (id === 'system') {
+    renderSystem();
+    checkSystemHealth();
+  }
+  if (id === 'backstore' && isBackstoreSalesVisible()) {
+    renderSales();
+    if (isSalesBestTabVisible()) renderBestSellers();
+  }
 }
 
 
@@ -223,7 +248,6 @@ function applyRoleUI() {
 }
 
 function openAdminLoginModal(note = '') {
-  if (scannerMode) return;
   qs('admin-login-pin').value = '';
   qs('admin-login-note').textContent = note;
   qs('admin-login-modal').classList.remove('hidden');
@@ -245,6 +269,7 @@ async function handleAdminLogin() {
     return;
   }
   isAdminLoggedIn = true;
+  localStorage.setItem(ADMIN_SESSION_KEY, '1');
   sessionStorage.setItem(ADMIN_SESSION_KEY, '1');
   closeAdminLoginModal();
   applyRoleUI();
@@ -257,19 +282,6 @@ function handleAdminLogout() {
   localStorage.removeItem(ADMIN_SESSION_KEY);
   applyRoleUI();
   showScreen('customer');
-}
-
-function applyScannerModeUI() {
-  if (!scannerMode) return;
-  document.querySelectorAll('[data-screen]').forEach((btn) => {
-    if (!scannerAllowedScreens.has(btn.dataset.screen)) {
-      btn.classList.add('hidden');
-      btn.setAttribute('aria-hidden', 'true');
-    }
-  });
-  ['backstore', 'system'].forEach((screenId) => qs(screenId)?.classList.add('hidden'));
-  ['admin-login-btn', 'admin-logout-btn', 'open-customer-display-from-header', 'open-staff-qr-modal']
-    .forEach((id) => qs(id)?.classList.add('hidden'));
 }
 
 function applyTheme() {
@@ -486,7 +498,45 @@ function renderTodaySalesBadge() {
   const node = qs('host-today-sales');
   if (!node) return;
   const summary = todaySalesSummary(db?.sales || []);
-  node.textContent = `💰 วันนี้ขายแล้ว ${money(summary.total)} บาท`;
+  node.textContent = `💰 ยอดขายวันนี้ ฿${money(summary.total)}`;
+}
+
+function summarizeTodaySoldItems(todaySales = []) {
+  const grouped = new Map();
+  todaySales.forEach((sale) => {
+    (sale.items || []).forEach((item) => {
+      const name = String(item.name || '').trim() || 'ไม่ระบุชื่อเมนู';
+      const qty = Math.max(1, Number(item.qty || 1));
+      const current = grouped.get(name) || { name, qty: 0, total: 0 };
+      current.qty += qty;
+      current.total += Number(item.price || 0) * qty;
+      grouped.set(name, current);
+    });
+  });
+  return [...grouped.values()].sort((a, b) => b.qty - a.qty || b.total - a.total);
+}
+
+function openTodaySalesModal() {
+  const modal = qs('today-sales-modal');
+  const title = qs('today-sales-modal-title');
+  const content = qs('today-sales-modal-content');
+  if (!modal || !content) return;
+  const summary = todaySalesSummary(db?.sales || []);
+  const soldItems = summarizeTodaySoldItems(summary.sales);
+  const todayText = new Date().toLocaleDateString('th-TH');
+  if (title) title.textContent = `💰 ยอดขายวันนี้ (${todayText})`;
+  content.innerHTML = `
+    <div class="sales-overview-grid sales-modal-kpi-grid">
+      <div class="list-card sales-kpi total"><strong>💰</strong><div>฿${money(summary.total)}</div></div>
+      <div class="list-card sales-kpi"><strong>🧾</strong><div>${summary.sales.length}</div></div>
+    </div>
+    <ul class="sales-modal-list">
+      ${soldItems.length
+    ? soldItems.map((item) => `<li><strong>🍽️ ${item.name}</strong><span>×${item.qty} • ฿${money(item.total)}</span></li>`).join('')
+    : '<li>📭 ยังไม่มีรายการขาย</li>'}
+    </ul>
+  `;
+  modal.classList.remove('hidden');
 }
 
 function readFileAsDataUrl(file) {
@@ -1411,7 +1461,8 @@ function renderSales() {
         <span>เงินสด <strong>฿${money(todaySummary.cash)}</strong></span>
         <span>QR/โอน <strong>฿${money(todaySummary.qr)}</strong></span>
         <span>จำนวนบิล <strong>${todaySummary.sales.length}</strong></span>
-      </div>`;
+      </div>
+      <small class="muted">สรุปยอดของโหมดหลังร้าน</small>`;
   }
   const granularity = salesFilterRange ? chooseChartGranularity(range) : (salesPeriod === 'day' ? 'hour' : salesPeriod === 'week' ? 'day' : 'day');
   const points = buildSalesBuckets(range, inCurrent, granularity);
@@ -1685,22 +1736,59 @@ function openQRModal(title, url, imageUrl) {
   qs('qr-modal').classList.remove('hidden');
 }
 
-async function loadData() {
+async function runLoadData(options = {}) {
   db = await api('/api/data');
-  if (db.error) return;
+  if (db.error) return false;
   version = db.meta.version;
   applyTheme();
   renderTables();
   renderCashier();
-  renderMenu();
-  renderOrderCategoryTabs();
-  renderOrderMenuChoices();
-  renderSales();
-  await renderBestSellers();
-  renderSystem();
-  await checkSystemHealth();
+  const shouldRenderMenu = options.forceMenuRender || isBackstoreMenuVisible();
+  const shouldRenderOrderChoices = options.forceOrderRender || isTableOrderModalOpen();
+  const shouldRenderSales = options.forceSalesRender || isBackstoreSalesVisible() || !qs('today-sales-modal')?.classList.contains('hidden');
+  const shouldRenderSystem = options.forceSystemRender || isSystemScreenActive();
+  if (shouldRenderMenu) renderMenu();
+  if (shouldRenderOrderChoices) {
+    renderOrderCategoryTabs();
+    renderOrderMenuChoices();
+  }
+  if (shouldRenderSales) {
+    renderSales();
+  } else {
+    renderTodaySalesBadge();
+  }
+  if ((options.refreshBestSellers || isSalesBestTabVisible()) && shouldRenderSales) {
+    await renderBestSellers();
+  }
+  if (shouldRenderSystem) {
+    renderSystem();
+  }
+  if ((options.refreshSystemHealth || isSystemScreenActive()) && shouldRenderSystem) {
+    await checkSystemHealth();
+  }
   renderDeskSummary();
   updateNetworkStatus(true);
+  return true;
+}
+
+async function loadData(options = {}) {
+  if (loadDataPromise) {
+    loadDataQueued = true;
+    queuedLoadOptions = { ...queuedLoadOptions, ...options };
+    return loadDataPromise;
+  }
+  loadDataPromise = runLoadData(options);
+  try {
+    return await loadDataPromise;
+  } finally {
+    loadDataPromise = null;
+    if (loadDataQueued) {
+      const nextOptions = { ...queuedLoadOptions };
+      loadDataQueued = false;
+      queuedLoadOptions = {};
+      await loadData(nextOptions);
+    }
+  }
 }
 
 function updateNetworkStatus(online) {
@@ -1718,10 +1806,19 @@ function bind() {
   document.querySelectorAll('[data-backstore-tab]').forEach((btn) => btn.addEventListener('click', () => {
     document.querySelectorAll('[data-backstore-tab]').forEach((s) => s.classList.toggle('is-active', s === btn));
     ['menu', 'sales'].forEach((name) => qs(`backstore-${name}`).classList.toggle('hidden', name !== btn.dataset.backstoreTab));
+    if (btn.dataset.backstoreTab === 'menu') {
+      renderMenu();
+      return;
+    }
+    renderSales();
+    if (isSalesBestTabVisible()) renderBestSellers();
   }));
   document.querySelectorAll('[data-sales-tab]').forEach((btn) => btn.addEventListener('click', () => {
     document.querySelectorAll('[data-sales-tab]').forEach((s) => s.classList.toggle('is-active', s === btn));
     ['history', 'best', 'category'].forEach((name) => qs(`sales-tab-${name}`)?.classList.toggle('hidden', name !== btn.dataset.salesTab));
+    if (btn.dataset.salesTab === 'best') {
+      renderBestSellers();
+    }
   }));
   document.querySelectorAll('[data-backup-tab]').forEach((btn) => btn.addEventListener('click', () => {
     document.querySelectorAll('[data-backup-tab]').forEach((node) => node.classList.toggle('is-active', node === btn));
@@ -1794,9 +1891,14 @@ function bind() {
     });
   });
   qs('close-sales-period-modal')?.addEventListener('click', () => qs('sales-period-modal')?.classList.add('hidden'));
+  qs('close-today-sales-modal')?.addEventListener('click', () => qs('today-sales-modal')?.classList.add('hidden'));
   qs('sales-period-modal')?.addEventListener('click', (event) => {
     if (event.target.id === 'sales-period-modal') qs('sales-period-modal').classList.add('hidden');
   });
+  qs('today-sales-modal')?.addEventListener('click', (event) => {
+    if (event.target.id === 'today-sales-modal') qs('today-sales-modal').classList.add('hidden');
+  });
+  qs('host-today-sales')?.addEventListener('click', openTodaySalesModal);
   qs('sales-range-apply')?.addEventListener('click', () => {
     const fromRaw = qs('sales-range-from')?.value;
     const toRaw = qs('sales-range-to')?.value;
@@ -2167,29 +2269,39 @@ function bind() {
 }
 
 async function poll() {
+  if (isPollingLiveUpdate) return;
+  isPollingLiveUpdate = true;
   const info = await api(`/api/staff/live?since=${version}`);
-  if (info.error) {
-    updateNetworkStatus(false);
-    return;
-  }
-  updateNetworkStatus(true);
-  if (info.changed) {
-    const pendingSet = new Set((info.tables || []).filter((t) => t.status === 'pending_order').map((t) => t.id));
-    const checkoutSet = new Set((info.tables || []).filter((t) => t.call_staff_status === 'requested').map((t) => t.id));
-    const hasNewPending = [...pendingSet].some((id) => !lastPendingTableIds.has(id));
-    const hasNewCheckoutRequest = [...checkoutSet].some((id) => !lastCheckoutRequestIds.has(id));
-    if (hasNewPending) {
-      playAlert('new-order-sound');
-      [...pendingSet].filter((id) => !lastPendingTableIds.has(id)).forEach((tableId) => blinkTableCard(tableId));
+  try {
+    if (info.error) {
+      updateNetworkStatus(false);
+      return;
     }
-    if (hasNewCheckoutRequest) {
-      playCheckoutAlertBurst(5000);
-      playCallStaffAlertBurst(5000);
-      [...checkoutSet].filter((id) => !lastCheckoutRequestIds.has(id)).forEach((tableId) => blinkTableCard(tableId));
+    updateNetworkStatus(true);
+    if (info.changed) {
+      const pendingSet = new Set((info.tables || []).filter((t) => t.status === 'pending_order').map((t) => t.id));
+      const checkoutSet = new Set((info.tables || []).filter((t) => t.call_staff_status === 'requested').map((t) => t.id));
+      const hasNewPending = [...pendingSet].some((id) => !lastPendingTableIds.has(id));
+      const hasNewCheckoutRequest = [...checkoutSet].some((id) => !lastCheckoutRequestIds.has(id));
+      if (hasNewPending) {
+        playAlert('new-order-sound');
+        [...pendingSet].filter((id) => !lastPendingTableIds.has(id)).forEach((tableId) => blinkTableCard(tableId));
+      }
+      if (hasNewCheckoutRequest) {
+        playCheckoutAlertBurst(5000);
+        playCallStaffAlertBurst(5000);
+        [...checkoutSet].filter((id) => !lastCheckoutRequestIds.has(id)).forEach((tableId) => blinkTableCard(tableId));
+      }
+      lastPendingTableIds = pendingSet;
+      lastCheckoutRequestIds = checkoutSet;
+      if (document.hidden) {
+        shouldRefreshWhenVisible = true;
+        return;
+      }
+      await loadData();
     }
-    lastPendingTableIds = pendingSet;
-    lastCheckoutRequestIds = checkoutSet;
-    await loadData();
+  } finally {
+    isPollingLiveUpdate = false;
   }
 }
 
@@ -2219,14 +2331,18 @@ function blinkTableCard(tableId) {
 
 (async function init() {
   applyRoleUI();
-  applyScannerModeUI();
   bind();
   await loadNetworkBaseUrl();
-  await loadData();
+  await loadData({ refreshSystemHealth: true });
   showScreen('customer');
   if (tableParam > 0) {
     selectedTableId = tableParam;
     showScreen('customer');
   }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !shouldRefreshWhenVisible) return;
+    shouldRefreshWhenVisible = false;
+    loadData();
+  });
   connectLiveEvents();
 })();
