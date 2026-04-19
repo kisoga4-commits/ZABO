@@ -27,7 +27,7 @@ log = logging.getLogger("werkzeug")
 log.setLevel(logging.ERROR)
 
 app = Flask(__name__)
-ASSET_VERSION = "20260413-scan-staff-scanner-mode-v1"
+ASSET_VERSION = "20260419-client-admin-sales-ui-v1"
 
 
 @app.after_request

@@ -26,7 +26,7 @@
         </div>
       </div>
       <div class="header-icons">
-        <div id="host-today-sales" class="pill sales-pill">💰 วันนี้ขายแล้ว 0 บาท</div>
+        <button id="host-today-sales" class="pill sales-pill sales-pill-btn" type="button">💰 ยอดขายวันนี้ ฿0</button>
         <button id="admin-login-btn" class="btn-soft" type="button" aria-label="Admin login">🔐 Admin Login</button>
         <button id="admin-logout-btn" class="btn-soft hidden" type="button" aria-label="Admin logout">🚪 Admin Logout</button>
         <button id="open-customer-display-from-header" class="icon-btn" type="button" aria-label="Open customer display">🖥️</button>
@@ -103,7 +103,7 @@
         </div>
 
         <div id="backstore-sales" class="panel-block hidden">
-          <div class="sales-dashboard-head sales-redesign">
+          <div class="sales-dashboard-head sales-redesign sales-clean-layout">
             <div class="sales-topline">
               <h3>ภาพรวมยอดขาย</h3>
               <button id="open-sales-insight" class="btn-secondary" type="button">Insight</button>
@@ -119,7 +119,7 @@
               <button id="sales-range-apply" class="btn-soft" type="button">ดูช่วงวันที่</button>
             </div>
             <div id="sales-comparison" class="sales-comparison-card"></div>
-            <div id="sales-overview" class="sales-overview-grid premium-kpi"></div>
+            <div id="sales-overview" class="sales-overview-grid sales-compact-kpi"></div>
             <div id="sales-today-summary" class="list-card sales-today-summary"></div>
             <div id="sales-chart" class="sales-chart"></div>
           </div>
@@ -315,6 +315,16 @@
         <button id="close-sales-period-modal" class="btn-soft btn-close-x" type="button">✖</button>
       </div>
       <div id="sales-period-modal-content" class="sales-period-modal-content"></div>
+    </div>
+  </div>
+
+  <div id="today-sales-modal" class="modal hidden">
+    <div class="modal-card compact">
+      <div class="section-head">
+        <h3 id="today-sales-modal-title">วันนี้ขายได้อะไรบ้าง</h3>
+        <button id="close-today-sales-modal" class="btn-soft btn-close-x" type="button">✖</button>
+      </div>
+      <div id="today-sales-modal-content" class="sales-period-modal-content"></div>
     </div>
   </div>
 
