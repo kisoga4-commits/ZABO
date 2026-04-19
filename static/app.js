@@ -197,7 +197,9 @@ function showScreen(id) {
   if (scannerMode && !scannerAllowedScreens.has(id)) return;
   document.querySelectorAll('.screen').forEach((s) => s.classList.add('hidden'));
   qs(id).classList.remove('hidden');
+  document.body.dataset.activeScreen = id;
   document.querySelectorAll('[data-screen]').forEach((b) => b.classList.toggle('is-active', b.dataset.screen === id));
+  updateCustomerQuickOrderBar();
 }
 
 
@@ -409,7 +411,7 @@ function renderOrderMenuChoices() {
       const item = filteredMenu[index];
       const btn = document.createElement('article');
       btn.className = 'menu-choice visual large-thumb';
-      btn.innerHTML = `<div class="menu-choice-thumb">${item.image ? `<img src="${item.image}" alt="${item.name}" />` : 'Image'}</div><strong>${item.name}</strong><small>฿${money(item.price)}</small>`;
+      btn.innerHTML = `<div class="menu-choice-thumb">${item.image ? `<img src="${item.image}" alt="${item.name}" loading="lazy" decoding="async" />` : 'Image'}</div><strong>${item.name}</strong><small>฿${money(item.price)}</small>`;
       btn.addEventListener('click', () => {
         const addonOptions = normalizeAddonOptions(item);
         if (!addonOptions.length) {
@@ -440,6 +442,15 @@ function renderOrderMenuChoices() {
   if (!filteredMenu.length) {
     grid.innerHTML = '<div class="empty">ไม่มีเมนูในหมวดนี้</div>';
   }
+}
+
+function shouldSkipServerCompression(imageDataUrl = '') {
+  const image = String(imageDataUrl || '');
+  const separatorIndex = image.indexOf(',');
+  if (separatorIndex < 0) return false;
+  const isWebp = image.startsWith('data:image/webp');
+  const approxBytes = Math.ceil((Math.max(0, image.length - separatorIndex - 1) * 3) / 4);
+  return isWebp && approxBytes > 0 && approxBytes <= 220 * 1024;
 }
 
 function getMenuCategories() {
@@ -662,6 +673,7 @@ function renderOrderCart() {
   if (!orderCart.length) {
     list.innerHTML = '<div class="empty">ยังไม่มีรายการในตะกร้า</div>';
     qs('order-cart-total').textContent = 'รวม 0 บาท';
+    updateCustomerQuickOrderBar();
     return;
   }
   orderCart.forEach((item, idx) => {
@@ -674,6 +686,21 @@ function renderOrderCart() {
     list.appendChild(row);
   });
   qs('order-cart-total').textContent = `รวม ${money(orderCart.reduce((s, i) => s + (Number(i.price || 0) * Math.max(1, Number(i.qty || 1))), 0))} บาท`;
+  updateCustomerQuickOrderBar();
+}
+
+function updateCustomerQuickOrderBar() {
+  const quickBar = qs('order-customer-quickbar');
+  const quickMeta = qs('order-customer-quickmeta');
+  const quickSubmit = qs('order-submit-quick');
+  if (!quickBar || !quickMeta || !quickSubmit) return;
+  const isCustomerScreen = document.body.dataset.activeScreen === 'customer';
+  const hasSelectedTable = Number(selectedTableId || 0) > 0;
+  quickBar.classList.toggle('hidden', !(isCustomerScreen && hasSelectedTable));
+  const itemCount = orderCart.reduce((sum, item) => sum + Math.max(1, Number(item.qty || 1)), 0);
+  const total = orderCart.reduce((sum, item) => sum + (Number(item.price || 0) * Math.max(1, Number(item.qty || 1))), 0);
+  quickMeta.textContent = `${itemCount} รายการ · ${money(total)} บาท`;
+  quickSubmit.disabled = itemCount <= 0;
 }
 
 function summarizeItems(items = []) {
@@ -833,6 +860,7 @@ function selectTable(tableId) {
   renderExistingOrders(tableId);
   renderPendingRequestActions(tableId);
   renderDeskSummary();
+  updateCustomerQuickOrderBar();
   qs('table-order-modal').classList.remove('hidden');
 }
 
@@ -1285,6 +1313,74 @@ function openSalesPeriodModal(range, salesInRange) {
   modal.classList.remove('hidden');
 }
 
+function summarizeTodayCategorySales(sales = [], menu = []) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const menuCategoryById = new Map((menu || []).map((item) => [String(item.id), normalizeCategoryName(item.category)]));
+  const menuCategoryByName = new Map((menu || []).map((item) => [String(item.name || '').trim(), normalizeCategoryName(item.category)]));
+  const categoryMap = new Map();
+  const todaySales = (sales || []).filter((sale) => {
+    const stamp = salesDate(sale);
+    return stamp >= start && stamp <= end;
+  });
+
+  todaySales.forEach((sale) => {
+    (sale.items || []).forEach((item) => {
+      const qty = Math.max(1, Number(item.qty || item.quantity || 1));
+      const lineTotal = Number(item.price || 0) * qty;
+      const category = normalizeCategoryName(
+        item.category
+        || menuCategoryById.get(String(item.item_id || item.id || ''))
+        || menuCategoryByName.get(String(item.name || '').trim())
+        || 'ทั่วไป',
+      );
+      if (!categoryMap.has(category)) {
+        categoryMap.set(category, { category, total: 0, qty: 0, bills: new Set() });
+      }
+      const row = categoryMap.get(category);
+      row.total += lineTotal;
+      row.qty += qty;
+      row.bills.add(String(sale.id || ''));
+    });
+  });
+
+  return Array.from(categoryMap.values())
+    .map((row) => ({ ...row, billsCount: row.bills.size || 0 }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function renderSalesCategoryDaily() {
+  const list = qs('sales-category-daily-list');
+  const summary = qs('sales-category-daily-summary');
+  if (!list || !summary) return;
+  const rows = summarizeTodayCategorySales(db.sales || [], db.menu || []);
+  const total = rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  const totalBills = rows.reduce((sum, row) => sum + Number(row.billsCount || 0), 0);
+  summary.innerHTML = `
+    <div class="sales-category-kpi"><strong>วันนี้</strong><span>${new Date().toLocaleDateString('th-TH')}</span></div>
+    <div class="sales-category-kpi"><strong>ยอดรวม</strong><span>฿${money(total)}</span></div>
+    <div class="sales-category-kpi"><strong>หมวด</strong><span>${rows.length}</span></div>
+    <div class="sales-category-kpi"><strong>จำนวนบิลรวม</strong><span>${totalBills}</span></div>
+  `;
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty">วันนี้ยังไม่มีรายการขาย</div>';
+    return;
+  }
+  list.innerHTML = rows
+    .map((row, index) => `
+      <article class="sales-category-row">
+        <div class="sales-category-rank">${index + 1}</div>
+        <div class="sales-category-main">
+          <strong>${row.category}</strong>
+          <small>${row.qty} ชิ้น • ${row.billsCount} บิล</small>
+        </div>
+        <strong class="sales-category-total">฿${money(row.total)}</strong>
+      </article>
+    `)
+    .join('');
+}
+
 function renderSales() {
   const sales = db.sales || [];
   const todaySummary = todaySalesSummary(sales);
@@ -1336,6 +1432,7 @@ function renderSales() {
       <div class="sales-row-foot"><span class="sales-pay-icon">${isCash ? '💵' : '📱'}</span><small>${isCash ? 'เงินสด' : 'โอน'}</small><button class="btn-soft btn-danger js-sales-delete" data-sale-id="${sale.id}" type="button" aria-label="ลบประวัติ">🗑️</button></div>`;
     body.appendChild(card);
   });
+  renderSalesCategoryDaily();
 }
 
 async function renderBestSellers() {
@@ -1597,6 +1694,7 @@ async function loadData() {
   renderCashier();
   renderMenu();
   renderOrderCategoryTabs();
+  renderOrderMenuChoices();
   renderSales();
   await renderBestSellers();
   renderSystem();
@@ -1623,7 +1721,7 @@ function bind() {
   }));
   document.querySelectorAll('[data-sales-tab]').forEach((btn) => btn.addEventListener('click', () => {
     document.querySelectorAll('[data-sales-tab]').forEach((s) => s.classList.toggle('is-active', s === btn));
-    ['history', 'best'].forEach((name) => qs(`sales-tab-${name}`)?.classList.toggle('hidden', name !== btn.dataset.salesTab));
+    ['history', 'best', 'category'].forEach((name) => qs(`sales-tab-${name}`)?.classList.toggle('hidden', name !== btn.dataset.salesTab));
   }));
   document.querySelectorAll('[data-backup-tab]').forEach((btn) => btn.addEventListener('click', () => {
     document.querySelectorAll('[data-backup-tab]').forEach((node) => node.classList.toggle('is-active', node === btn));
@@ -1722,6 +1820,7 @@ function bind() {
   qs('store-name')?.addEventListener('input', updateReceiptPreview);
 
   qs('order-submit').addEventListener('click', submitOrderFromPanel);
+  qs('order-submit-quick')?.addEventListener('click', submitOrderFromPanel);
 
   qs('bill-pay-cash').addEventListener('click', async () => {
     if (!activeCashierTableId) return;
@@ -1776,8 +1875,10 @@ function bind() {
       quality: 0.74,
       crop: 'square',
     });
-    const compressed = await api('/api/menu/upload-image', { method: 'POST', body: JSON.stringify({ image: menuImagePreviewData }) });
-    menuImagePreviewData = compressed.image || menuImagePreviewData;
+    if (!shouldSkipServerCompression(menuImagePreviewData)) {
+      const compressed = await api('/api/menu/upload-image', { method: 'POST', body: JSON.stringify({ image: menuImagePreviewData }) });
+      menuImagePreviewData = compressed.image || menuImagePreviewData;
+    }
     qs('menu-image-preview').src = menuImagePreviewData;
     qs('menu-image-preview').classList.remove('hidden');
   });
