@@ -207,6 +207,10 @@ def main() -> None:
                 raise AssertionError(f"normalized menu image should be WEBP, got {normalized_image.format}")
             if normalized_image.width <= 0 or normalized_image.height <= 0:
                 raise AssertionError("normalized menu image dimensions are invalid")
+            if normalized_image.width != 420 or normalized_image.height != 420:
+                raise AssertionError(
+                    f"normalized menu image should be center-cropped 420x420, got {normalized_image.width}x{normalized_image.height}"
+                )
 
         customer_with_token = client.get(f"/customer?t={table_token}")
         assert_status(customer_with_token, 200, "customer token page")
