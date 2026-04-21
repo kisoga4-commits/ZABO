@@ -1176,6 +1176,37 @@ main{display:grid;gap:10px}
   #customer .full-width-pane{max-height:calc(100vh - 220px)}
   #cashier #checkout-list{max-height:calc(100vh - 220px)}
   .customer-facing-items{max-height:calc(100vh - 210px)}
+  .desktop-shell .modern-header{
+    align-items:flex-start;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .desktop-shell .brand-left{
+    min-width:0;
+    flex:1 1 260px;
+  }
+  .desktop-shell #header-store-name{
+    margin-top:2px;
+    font-size:1.15rem;
+    line-height:1.2;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+  .desktop-shell .header-icons{
+    width:100%;
+    justify-content:flex-start;
+  }
+}
+
+@media (max-width: 560px){
+  .desktop-shell .hero-logo{
+    width:64px;
+    height:64px;
+    border-radius:18px;
+  }
+  .desktop-shell #header-store-name{
+    font-size:1.02rem;
+  }
 }
 
 /* customer mode: POS-like quick action bar for send-to-kitchen */
