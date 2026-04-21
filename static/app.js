@@ -28,7 +28,7 @@ const THEME_PRESETS = [
   { id: 'ocean', label: 'Ocean', primary: '#0ea5e9', bg: '#ecfeff', card: '#ffffff' },
   { id: 'mono', label: 'Mono', primary: '#334155', bg: '#f8fafc', card: '#ffffff' },
 ];
-const DEFAULT_MENU_CATEGORIES = ['ทั่วไป', 'อาหารจานหลัก', 'ของทานเล่น', 'เครื่องดื่ม', 'ของหวาน'];
+const DEFAULT_MENU_CATEGORIES = ['ทั่วไป'];
 
 const statusMap = {
   available: { label: 'ว่าง', tone: 'available', icon: '○' },
@@ -221,10 +221,26 @@ function showScreen(id) {
     renderSystem();
     checkSystemHealth();
   }
-  if (id === 'backstore' && isBackstoreSalesVisible()) {
-    renderSales();
-    if (isSalesBestTabVisible()) renderBestSellers();
+  if (id === 'backstore') {
+    const activeBackstoreTab = document.querySelector('[data-backstore-tab].is-active')?.dataset.backstoreTab || 'menu';
+    setBackstoreTab(activeBackstoreTab, { render: true });
   }
+}
+
+function setBackstoreTab(tabName, options = {}) {
+  const nextTab = tabName === 'sales' ? 'sales' : 'menu';
+  const shouldRender = options.render !== false;
+  document.querySelectorAll('[data-backstore-tab]').forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.backstoreTab === nextTab);
+  });
+  ['menu', 'sales'].forEach((name) => qs(`backstore-${name}`)?.classList.toggle('hidden', name !== nextTab));
+  if (!shouldRender) return;
+  if (nextTab === 'menu') {
+    renderMenu();
+    return;
+  }
+  renderSales();
+  if (isSalesBestTabVisible()) renderBestSellers();
 }
 
 
@@ -1804,14 +1820,7 @@ let addAddonRow = () => {};
 function bind() {
   document.querySelectorAll('[data-screen]').forEach((btn) => btn.addEventListener('click', () => showScreen(btn.dataset.screen)));
   document.querySelectorAll('[data-backstore-tab]').forEach((btn) => btn.addEventListener('click', () => {
-    document.querySelectorAll('[data-backstore-tab]').forEach((s) => s.classList.toggle('is-active', s === btn));
-    ['menu', 'sales'].forEach((name) => qs(`backstore-${name}`).classList.toggle('hidden', name !== btn.dataset.backstoreTab));
-    if (btn.dataset.backstoreTab === 'menu') {
-      renderMenu();
-      return;
-    }
-    renderSales();
-    if (isSalesBestTabVisible()) renderBestSellers();
+    setBackstoreTab(btn.dataset.backstoreTab, { render: true });
   }));
   document.querySelectorAll('[data-sales-tab]').forEach((btn) => btn.addEventListener('click', () => {
     document.querySelectorAll('[data-sales-tab]').forEach((s) => s.classList.toggle('is-active', s === btn));
