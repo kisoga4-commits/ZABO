@@ -59,7 +59,7 @@ const tableParam = Number(new URLSearchParams(window.location.search).get('table
 async function loadNetworkBaseUrl() {
   const network = await api('/api/system/network');
   if (!network.error && network.base_url) {
-    networkBaseUrl = window.location.origin;
+    networkBaseUrl = network.base_url;
     return;
   }
   if (!networkBaseUrl) {
